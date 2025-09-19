@@ -13,9 +13,19 @@
         <attribute name="outlets" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="tips" optional="YES" attributeType="String"/>
         <attribute name="photoURL" optional="YES" attributeType="String"/>
+        <relationship name="userRatings" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UserRating" inverseName="spot" inverseEntity="UserRating"/>
+    </entity>
+    <entity name="UserRating" representedClassName="UserRating" syncable="YES" codeGenerationType="class">
+        <attribute name="wifiRating" optional="NO" attributeType="Integer 16" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="noiseRating" optional="NO" attributeType="String" defaultValueString="Low"/>
+        <attribute name="outlets" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="tip" optional="YES" attributeType="String"/>
+        <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="spot" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Spot" inverseName="userRatings" inverseEntity="Spot"/>
     </entity>
     <elements>
         <element name="Item" positionX="-63" positionY="-18" width="128" height="44"/>
         <element name="Spot" positionX="-63" positionY="18" width="128" height="119"/>
+        <element name="UserRating" positionX="-63" positionY="54" width="128" height="89"/>
     </elements>
 </model>

@@ -13,6 +13,7 @@ struct SpotDetailView: View {
     let viewModel: SpotViewModel
     @StateObject private var locationService = LocationService()
     @State private var showingEditView = false
+    @State private var showingRatingForm = false
     @State private var userRating: Int16 = 0
     @State private var userTips: String = ""
     @State private var isEditingTips = false
@@ -96,37 +97,24 @@ struct SpotDetailView: View {
                 .background(Color(.systemGray6))
                 .cornerRadius(12)
                 
-                // User Rating Section
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Your Rating")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                    
-                    HStack(spacing: 8) {
-                        ForEach(1...5, id: \.self) { star in
-                            Button(action: {
-                                userRating = Int16(star)
-                            }) {
-                                Image(systemName: star <= userRating ? "star.fill" : "star")
-                                    .font(.title2)
-                                    .foregroundColor(star <= userRating ? .yellow : .gray)
-                            }
-                        }
-                        
-                        Spacer()
-                        
-                        if userRating > 0 {
-                            Button("Save Rating") {
-                                saveUserRating()
-                            }
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                        }
+                // Community Ratings Section
+                AverageRatingsView(spot: spot)
+                
+                // Rate This Spot Button
+                Button(action: {
+                    showingRatingForm = true
+                }) {
+                    HStack {
+                        Image(systemName: "star.fill")
+                        Text("Rate This Spot")
                     }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .cornerRadius(12)
                 }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
                 
                 // User Tips Section
                 VStack(alignment: .leading, spacing: 12) {
@@ -208,6 +196,9 @@ struct SpotDetailView: View {
         .sheet(isPresented: $showingEditView) {
             EditSpotView(spot: spot, viewModel: viewModel)
         }
+        .sheet(isPresented: $showingRatingForm) {
+            UserRatingForm(spot: spot)
+        }
         .onAppear {
             locationService.requestLocationPermission()
             loadUserData()
@@ -229,14 +220,6 @@ struct SpotDetailView: View {
         userTips = ""
     }
     
-    private func saveUserRating() {
-        // Update the spot's WiFi rating with user's rating
-        spot.wifiRating = userRating
-        viewModel.saveContext()
-        
-        saveMessage = "Rating saved successfully!"
-        showingSaveAlert = true
-    }
     
     private func saveUserTips() {
         // Append user tips to existing tips
