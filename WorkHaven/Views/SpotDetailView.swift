@@ -13,6 +13,11 @@ struct SpotDetailView: View {
     let viewModel: SpotViewModel
     @StateObject private var locationService = LocationService()
     @State private var showingEditView = false
+    @State private var userRating: Int16 = 0
+    @State private var userTips: String = ""
+    @State private var isEditingTips = false
+    @State private var showingSaveAlert = false
+    @State private var saveMessage = ""
     
     var body: some View {
         ScrollView {
@@ -91,10 +96,81 @@ struct SpotDetailView: View {
                 .background(Color(.systemGray6))
                 .cornerRadius(12)
                 
-                // Tips Section
+                // User Rating Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Your Rating")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    HStack(spacing: 8) {
+                        ForEach(1...5, id: \.self) { star in
+                            Button(action: {
+                                userRating = Int16(star)
+                            }) {
+                                Image(systemName: star <= userRating ? "star.fill" : "star")
+                                    .font(.title2)
+                                    .foregroundColor(star <= userRating ? .yellow : .gray)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        if userRating > 0 {
+                            Button("Save Rating") {
+                                saveUserRating()
+                            }
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+                
+                // User Tips Section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Your Tips")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        
+                        Spacer()
+                        
+                        Button(isEditingTips ? "Save" : "Add Tips") {
+                            if isEditingTips {
+                                saveUserTips()
+                            } else {
+                                isEditingTips = true
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    }
+                    
+                    if isEditingTips {
+                        TextField("Share your experience at this spot...", text: $userTips, axis: .vertical)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .lineLimit(3...6)
+                    } else if !userTips.isEmpty {
+                        Text(userTips)
+                            .font(.body)
+                            .padding(.vertical, 4)
+                    } else {
+                        Text("Tap 'Add Tips' to share your experience")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .italic()
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+                
+                // Original Tips Section (if exists)
                 if let tips = spot.tips, !tips.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Tips")
+                        Text("Original Tips")
                             .font(.headline)
                         Text(tips)
                             .font(.body)
@@ -134,6 +210,50 @@ struct SpotDetailView: View {
         }
         .onAppear {
             locationService.requestLocationPermission()
+            loadUserData()
+        }
+        .alert("Saved", isPresented: $showingSaveAlert) {
+            Button("OK") { }
+        } message: {
+            Text(saveMessage)
+        }
+    }
+    
+    // MARK: - Helper Functions
+    
+    private func loadUserData() {
+        // Load existing user rating and tips from Core Data
+        // For now, we'll initialize with empty values
+        // In a real app, you might want to store user-specific data
+        userRating = 0
+        userTips = ""
+    }
+    
+    private func saveUserRating() {
+        // Update the spot's WiFi rating with user's rating
+        spot.wifiRating = userRating
+        viewModel.saveContext()
+        
+        saveMessage = "Rating saved successfully!"
+        showingSaveAlert = true
+    }
+    
+    private func saveUserTips() {
+        // Append user tips to existing tips
+        let existingTips = spot.tips ?? ""
+        let newTips = userTips.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if !newTips.isEmpty {
+            if existingTips.isEmpty {
+                spot.tips = newTips
+            } else {
+                spot.tips = "\(existingTips)\n\n--- User Tip ---\n\(newTips)"
+            }
+            
+            viewModel.saveContext()
+            isEditingTips = false
+            saveMessage = "Tips saved successfully!"
+            showingSaveAlert = true
         }
     }
 }

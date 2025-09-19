@@ -99,8 +99,8 @@ class SpotViewModel: ObservableObject {
         return spots.filter { $0.outlets }
     }
     
-    // MARK: - Private Methods
-    private func saveContext() {
+    // MARK: - Public Methods
+    func saveContext() {
         do {
             try viewContext.save()
             fetchSpots() // Refresh the list
