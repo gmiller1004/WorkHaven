@@ -12,18 +12,24 @@ import CoreData
 struct WorkHavenApp: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var dataImporter: DataImporter
+    @StateObject private var cloudKitManager: CloudKitManager
 
     init() {
-        self._dataImporter = StateObject(wrappedValue: DataImporter(context: PersistenceController.shared.container.viewContext))
+        let context = PersistenceController.shared.container.viewContext
+        self._dataImporter = StateObject(wrappedValue: DataImporter(context: context))
+        self._cloudKitManager = StateObject(wrappedValue: CloudKitManager(context: context))
     }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
-                .onAppear {
-                    checkAndImportData()
-                }
+        .onAppear {
+            checkAndImportData()
+            Task {
+                await cloudKitManager.syncWithCloudKit()
+            }
+        }
         }
     }
     

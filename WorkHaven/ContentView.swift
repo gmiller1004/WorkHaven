@@ -31,11 +31,17 @@ struct ContentView: View {
                     Text("Map")
                 }
             
-            ImportView()
-                .tabItem {
-                    Image(systemName: "square.and.arrow.down")
-                    Text("Import")
-                }
+                ImportView()
+                    .tabItem {
+                        Image(systemName: "square.and.arrow.down")
+                        Text("Import")
+                    }
+                
+                CloudKitSyncView(context: viewContext)
+                    .tabItem {
+                        Image(systemName: "icloud")
+                        Text("Sync")
+                    }
         }
     }
 }
