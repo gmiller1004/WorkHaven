@@ -12,7 +12,19 @@ struct ContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
 
     var body: some View {
-        SpotListView(context: viewContext)
+        TabView {
+            SpotListView(context: viewContext)
+                .tabItem {
+                    Image(systemName: "list.bullet")
+                    Text("Spots")
+                }
+            
+            MapView()
+                .tabItem {
+                    Image(systemName: "map")
+                    Text("Map")
+                }
+        }
     }
 }
 
