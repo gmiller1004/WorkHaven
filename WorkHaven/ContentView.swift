@@ -19,6 +19,12 @@ struct ContentView: View {
                     Text("Spots")
                 }
             
+            SpotSearchView()
+                .tabItem {
+                    Image(systemName: "magnifyingglass")
+                    Text("Search")
+                }
+            
             MapView()
                 .tabItem {
                     Image(systemName: "map")
