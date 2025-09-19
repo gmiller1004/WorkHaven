@@ -33,9 +33,15 @@ class DataImporter: ObservableObject {
             // Try to load from CSV file first
             var spots: [CSVSpot] = []
             
-            if let csvData = try? loadCSVFile(fileName: fileName) {
+            do {
+                guard let csvData = try loadCSVFile(fileName: fileName) else {
+                    throw DataImporterError.fileNotFound
+                }
                 spots = try parseCSVData(csvData)
-            } else {
+                await MainActor.run {
+                    importStatus = "Loading data from CSV file..."
+                }
+            } catch {
                 // Fallback to hardcoded data if CSV file not found
                 await MainActor.run {
                     importStatus = "CSV file not found, using built-in data..."
