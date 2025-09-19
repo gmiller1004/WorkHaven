@@ -14,6 +14,7 @@ struct SpotDetailView: View {
     @StateObject private var locationService = LocationService()
     @State private var showingEditView = false
     @State private var showingRatingForm = false
+    @State private var showingShareView = false
     @State private var userRating: Int16 = 0
     @State private var userTips: String = ""
     @State private var isEditingTips = false
@@ -100,20 +101,45 @@ struct SpotDetailView: View {
                 // Community Ratings Section
                 AverageRatingsView(spot: spot)
                 
-                // Rate This Spot Button
-                Button(action: {
-                    showingRatingForm = true
-                }) {
-                    HStack {
-                        Image(systemName: "star.fill")
-                        Text("Rate This Spot")
+                // Action Buttons
+                VStack(spacing: 12) {
+                    // Rate This Spot Button
+                    Button(action: {
+                        showingRatingForm = true
+                    }) {
+                        HStack {
+                            Image(systemName: "star.fill")
+                            Text("Rate This Spot")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .cornerRadius(12)
                     }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .cornerRadius(12)
+                    
+                    // Share This Spot Button
+                    Button(action: {
+                        showingShareView = true
+                    }) {
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Share This Spot")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.purple, Color.pink]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(12)
+                    }
                 }
                 
                 // User Tips Section
@@ -186,18 +212,25 @@ struct SpotDetailView: View {
             .padding()
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Edit") {
-                    showingEditView = true
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        HStack {
+                            ShareButton(spot: spot)
+                            
+                            Button("Edit") {
+                                showingEditView = true
+                            }
+                        }
+                    }
                 }
-            }
-        }
         .sheet(isPresented: $showingEditView) {
             EditSpotView(spot: spot, viewModel: viewModel)
         }
         .sheet(isPresented: $showingRatingForm) {
             UserRatingForm(spot: spot)
+        }
+        .sheet(isPresented: $showingShareView) {
+            SpotShareView(spot: spot)
         }
         .onAppear {
             locationService.requestLocationPermission()
