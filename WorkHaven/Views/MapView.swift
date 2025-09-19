@@ -27,8 +27,10 @@ struct MapView: View {
     
     init() {
         // Initialize with Boise, ID as default center
+        let boiseCenter = CLLocationCoordinate2D(latitude: 43.6150, longitude: -116.2023)
+        print("🗺️ MapView initializing with Boise coordinates: \(boiseCenter)")
         self._region = State(initialValue: MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 43.6150, longitude: -116.2023),
+            center: boiseCenter,
             span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
         ))
     }
@@ -47,6 +49,7 @@ struct MapView: View {
             }
             .onChange(of: locationService.currentLocation) { location in
                 if let location = location {
+                    print("📍 User location updated: \(location.coordinate)")
                     updateRegionToUserLocation(location)
                 }
             }
