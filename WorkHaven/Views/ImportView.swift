@@ -21,145 +21,152 @@ struct ImportView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 30) {
-                // Header
-                VStack(spacing: 16) {
-                    Image(systemName: "square.and.arrow.down")
-                        .font(.system(size: 60))
-                        .foregroundColor(.blue)
-                    
-                    Text("Import Boise Work Spaces")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                    
-                    Text("Import pre-configured work spaces from Boise, ID including coffee shops, parks, and co-working spaces.")
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-                
-                // Import Status
-                if dataImporter.isImporting {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Header
                     VStack(spacing: 16) {
-                        ProgressView(value: dataImporter.importProgress)
-                            .progressViewStyle(LinearProgressViewStyle())
-                            .scaleEffect(x: 1, y: 2, anchor: .center)
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 60))
+                            .foregroundColor(ThemeManager.Colors.primary)
                         
-                        Text(dataImporter.importStatus)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal)
-                } else {
-                    VStack(spacing: 16) {
-                        Text(dataImporter.importStatus.isEmpty ? "Ready to import Boise work spaces" : dataImporter.importStatus)
-                            .font(.body)
-                            .foregroundColor(dataImporter.importStatus.contains("Error") ? .red : .secondary)
+                        Text("Import Boise Work Spaces")
+                            .font(ThemeManager.Typography.dynamicTitle2())
+                            .fontWeight(.bold)
+                            .foregroundColor(ThemeManager.Colors.textPrimary)
+                        
+                        Text("Import pre-configured work spaces from Boise, ID including coffee shops, parks, and co-working spaces.")
+                            .font(ThemeManager.Typography.dynamicBody())
+                            .foregroundColor(ThemeManager.Colors.textSecondary)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal)
                     }
-                }
-                
-                // City Selection
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Select City")
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                    .padding(.horizontal, ThemeManager.Spacing.md)
                     
-                    Picker("City", selection: $selectedCity) {
-                        ForEach(availableCities, id: \.self) { city in
-                            Text(city).tag(city)
+                    // Import Status
+                    if dataImporter.isImporting {
+                        VStack(spacing: 16) {
+                            ProgressView(value: dataImporter.importProgress)
+                                .progressViewStyle(LinearProgressViewStyle())
+                                .scaleEffect(x: 1, y: 2, anchor: .center)
+                                .tint(ThemeManager.Colors.primary)
+                            
+                            Text(dataImporter.importStatus)
+                                .font(ThemeManager.Typography.dynamicCaption())
+                                .foregroundColor(ThemeManager.Colors.textSecondary)
                         }
+                        .padding(.horizontal, ThemeManager.Spacing.md)
+                    } else {
+                        VStack(spacing: 16) {
+                            Text(dataImporter.importStatus.isEmpty ? "Ready to import Boise work spaces" : dataImporter.importStatus)
+                                .font(ThemeManager.Typography.dynamicBody())
+                                .foregroundColor(dataImporter.importStatus.contains("Error") ? ThemeManager.Colors.error : ThemeManager.Colors.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.horizontal, ThemeManager.Spacing.md)
                     }
-                    .pickerStyle(MenuPickerStyle())
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
-                }
-                
-                // Action Buttons
-                VStack(spacing: 16) {
-                    // Import Button
-                    Button(action: {
-                        Task {
-                            await dataImporter.importWorkSpaces(for: selectedCity)
-                        }
-                    }) {
-                        HStack {
-                            Image(systemName: "square.and.arrow.down")
-                            Text("Import \(selectedCity) Work Spaces")
-                        }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(dataImporter.isImporting ? Color.gray : Color.blue)
-                        .cornerRadius(12)
-                    }
-                    .disabled(dataImporter.isImporting)
                     
-                    // Import All Button
-                    Button(action: {
-                        Task {
-                            await dataImporter.importAllAvailableCities()
-                        }
-                    }) {
-                        HStack {
-                            Image(systemName: "square.and.arrow.down.on.square")
-                            Text("Import All Cities")
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.blue)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(12)
-                    }
-                    .disabled(dataImporter.isImporting)
-                    
-                    // Clear All Button
-                    Button(action: {
-                        showingClearAlert = true
-                    }) {
-                        HStack {
-                            Image(systemName: "trash")
-                            Text("Clear All Spots")
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(12)
-                    }
-                    .disabled(dataImporter.isImporting)
-                }
-                .padding(.horizontal)
-                
-                // Info Section
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("What will be imported:")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
+                    // City Selection
                     VStack(alignment: .leading, spacing: 8) {
-                        ImportInfoRow(icon: "cup.and.saucer", text: "Coffee shops and cafes")
-                        ImportInfoRow(icon: "tree", text: "Parks and outdoor spaces")
-                        ImportInfoRow(icon: "building.2", text: "Co-working spaces")
-                        ImportInfoRow(icon: "wifi", text: "WiFi ratings and noise levels")
-                        ImportInfoRow(icon: "location", text: "Exact coordinates for mapping")
+                        Text("Select City")
+                            .font(ThemeManager.Typography.dynamicHeadline())
+                            .foregroundColor(ThemeManager.Colors.textPrimary)
+                        
+                        Picker("City", selection: $selectedCity) {
+                            ForEach(availableCities, id: \.self) { city in
+                                Text(city).tag(city)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(ThemeManager.Spacing.md)
+                        .background(ThemeManager.Colors.background)
+                        .cornerRadius(ThemeManager.CornerRadius.md)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.md)
+                                .stroke(ThemeManager.Colors.border, lineWidth: 1)
+                        )
                     }
+                    .padding(.horizontal, ThemeManager.Spacing.md)
+                    
+                    // Action Buttons
+                    VStack(spacing: 16) {
+                        // Import Button
+                        Button(action: {
+                            Task {
+                                await dataImporter.importWorkSpaces(for: selectedCity)
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "square.and.arrow.down")
+                                Text("Import \(selectedCity) Work Spaces")
+                            }
+                            .themedButton(style: .primary)
+                        }
+                        .disabled(dataImporter.isImporting)
+                        
+                        // Import All Button
+                        Button(action: {
+                            Task {
+                                await dataImporter.importAllAvailableCities()
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "square.and.arrow.down.on.square")
+                                Text("Import All Cities")
+                            }
+                            .themedButton(style: .secondary)
+                        }
+                        .disabled(dataImporter.isImporting)
+                        
+                        // Clear All Button
+                        Button(action: {
+                            showingClearAlert = true
+                        }) {
+                            HStack {
+                                Image(systemName: "trash")
+                                Text("Clear All Spots")
+                            }
+                            .font(ThemeManager.Typography.dynamicHeadline())
+                            .foregroundColor(ThemeManager.Colors.error)
+                            .frame(maxWidth: .infinity)
+                            .padding(ThemeManager.Spacing.md)
+                            .background(ThemeManager.Colors.error.opacity(0.1))
+                            .cornerRadius(ThemeManager.CornerRadius.lg)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.lg)
+                                    .stroke(ThemeManager.Colors.error, lineWidth: 1)
+                            )
+                        }
+                        .disabled(dataImporter.isImporting)
+                    }
+                    .padding(.horizontal, ThemeManager.Spacing.md)
+                    
+                    // Info Section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("What will be imported:")
+                            .font(ThemeManager.Typography.dynamicHeadline())
+                            .foregroundColor(ThemeManager.Colors.textPrimary)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            ImportInfoRow(icon: "cup.and.saucer", text: "Coffee shops and cafes")
+                            ImportInfoRow(icon: "tree", text: "Parks and outdoor spaces")
+                            ImportInfoRow(icon: "building.2", text: "Co-working spaces")
+                            ImportInfoRow(icon: "wifi", text: "WiFi ratings and noise levels")
+                            ImportInfoRow(icon: "location", text: "Exact coordinates for mapping")
+                        }
+                    }
+                    .padding(ThemeManager.Spacing.md)
+                    .background(ThemeManager.Colors.background)
+                    .cornerRadius(ThemeManager.CornerRadius.lg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.lg)
+                            .stroke(ThemeManager.Colors.border, lineWidth: 1)
+                    )
+                    .padding(.horizontal, ThemeManager.Spacing.md)
                 }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
-                .padding(.horizontal)
-                
-                Spacer()
+                .padding(.top, ThemeManager.Spacing.md)
+                .padding(.bottom, 100) // Extra padding to avoid tab bar overlap
             }
-            .padding(.top, 20)
+            .background(ThemeManager.Colors.background)
             .onAppear {
                 availableCities = dataImporter.getAvailableCities()
                 if availableCities.isEmpty {
@@ -189,12 +196,13 @@ struct ImportInfoRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .foregroundColor(.blue)
+                .foregroundColor(ThemeManager.Colors.primary)
                 .frame(width: 20)
+                .font(ThemeManager.Typography.dynamicBody())
             
             Text(text)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                .font(ThemeManager.Typography.dynamicSubheadline())
+                .foregroundColor(ThemeManager.Colors.textSecondary)
             
             Spacer()
         }

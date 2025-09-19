@@ -8,6 +8,7 @@
 import SwiftUI
 import MapKit
 import CoreData
+import CoreLocation
 
 struct MapView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -44,6 +45,8 @@ struct MapView: View {
                     }
                 }
             }
+            .accessibilityLabel("Map showing work spots")
+            .accessibilityHint("Double tap to explore spots, pinch to zoom")
             .onAppear {
                 setupLocation()
             }
@@ -59,16 +62,23 @@ struct MapView: View {
                     Spacer()
                     Button(action: centerOnUserLocation) {
                         Image(systemName: "location.fill")
-                            .font(.title2)
-                            .foregroundColor(.white)
+                            .font(ThemeManager.Typography.dynamicTitle3())
+                            .foregroundColor(ThemeManager.Colors.secondary)
                             .frame(width: 44, height: 44)
-                            .background(Color.blue)
+                            .background(ThemeManager.Colors.primary)
                             .clipShape(Circle())
-                            .shadow(radius: 4)
+                            .shadow(
+                                color: ThemeManager.Shadows.md.color,
+                                radius: ThemeManager.Shadows.md.radius,
+                                x: ThemeManager.Shadows.md.x,
+                                y: ThemeManager.Shadows.md.y
+                            )
                     }
-                    .padding(.trailing)
+                    .accessibilityLabel("Center map on current location")
+                    .accessibilityHint("Double tap to center the map on your current location")
+                    .padding(.trailing, ThemeManager.Spacing.md)
                 }
-                .padding(.top)
+                .padding(.top, ThemeManager.Spacing.md)
                 
                 Spacer()
             }
@@ -82,9 +92,11 @@ struct MapView: View {
                     UIApplication.shared.open(settingsUrl)
                 }
             }
+            .accessibilityLabel("Open Settings")
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Location access is required to center the map on your current location. Please enable location access in Settings.")
+                .font(ThemeManager.Typography.dynamicBody())
         }
     }
     
@@ -128,45 +140,67 @@ struct SpotAnnotationView: View {
             ZStack {
                 Circle()
                     .fill(spotColor)
-                    .frame(width: 30, height: 30)
+                    .frame(width: 32, height: 32)
                     .overlay(
                         Circle()
-                            .stroke(Color.white, lineWidth: 2)
+                            .stroke(ThemeManager.Colors.secondary, lineWidth: 2)
                     )
                 
-                Image(systemName: "wifi")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.white)
+                Image(systemName: wifiIcon)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(ThemeManager.Colors.secondary)
             }
             
-            Text(spot.name ?? "")
-                .font(.caption2)
-                .fontWeight(.medium)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color.white)
-                .cornerRadius(8)
-                .shadow(radius: 2)
+            Text(spot.name ?? "Unknown Spot")
+                .font(ThemeManager.Typography.dynamicCaption())
+                .fontWeight(.semibold)
+                .padding(.horizontal, ThemeManager.Spacing.sm)
+                .padding(.vertical, ThemeManager.Spacing.xs)
+                .background(ThemeManager.Colors.surface)
+                .cornerRadius(ThemeManager.CornerRadius.sm)
+                .shadow(
+                    color: ThemeManager.Shadows.sm.color,
+                    radius: ThemeManager.Shadows.sm.radius,
+                    x: ThemeManager.Shadows.sm.x,
+                    y: ThemeManager.Shadows.sm.y
+                )
                 .lineLimit(1)
-                .frame(maxWidth: 80)
+                .frame(maxWidth: 100)
         }
         .onTapGesture {
             onTap()
         }
+        .accessibilityLabel("\(spot.name ?? "Unknown spot"), WiFi rating \(spot.wifiRating) out of 5")
+        .accessibilityHint("Double tap to view details")
     }
     
     private var spotColor: Color {
         switch spot.wifiRating {
         case 5:
-            return .green
+            return ThemeManager.Colors.success
         case 4:
-            return .blue
+            return ThemeManager.Colors.primary
         case 3:
-            return .yellow
+            return ThemeManager.Colors.warning
         case 2:
-            return .orange
+            return Color.orange
         default:
-            return .red
+            return ThemeManager.Colors.error
+        }
+    }
+    
+    private var wifiIcon: String {
+        switch spot.wifiRating {
+        case 5:
+            return "wifi"
+        case 4:
+            return "wifi"
+        case 3:
+            return "wifi"
+        case 2:
+            return "wifi.exclamationmark"
+        default:
+            return "wifi.slash"
         }
     }
 }

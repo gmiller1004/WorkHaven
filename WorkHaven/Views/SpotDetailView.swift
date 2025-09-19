@@ -23,16 +23,19 @@ struct SpotDetailView: View {
     
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
                 // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(spot.name ?? "")
-                        .font(.largeTitle)
+                VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
+                    Text(spot.name ?? "Unknown Spot")
+                        .font(ThemeManager.Typography.dynamicLargeTitle())
                         .fontWeight(.bold)
+                        .foregroundColor(ThemeManager.Colors.textPrimary)
+                        .accessibilityLabel("Spot name: \(spot.name ?? "Unknown Spot")")
                     
-                    Text(spot.address ?? "")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
+                    Text(spot.address ?? "No address")
+                        .font(ThemeManager.Typography.dynamicTitle3())
+                        .foregroundColor(ThemeManager.Colors.textSecondary)
+                        .accessibilityLabel("Address: \(spot.address ?? "No address")")
                 }
                 
                 // Photo Section
@@ -43,66 +46,91 @@ struct SpotDetailView: View {
                             .aspectRatio(contentMode: .fill)
                     } placeholder: {
                         Rectangle()
-                            .fill(Color.gray.opacity(0.3))
+                            .fill(ThemeManager.Colors.background)
                             .overlay(
                                 Image(systemName: "photo")
-                                    .font(.largeTitle)
-                                    .foregroundColor(.gray)
+                                    .font(ThemeManager.Typography.dynamicLargeTitle())
+                                    .foregroundColor(ThemeManager.Colors.textSecondary)
                             )
                     }
                     .frame(height: 200)
                     .clipped()
-                    .cornerRadius(12)
+                    .cornerRadius(ThemeManager.CornerRadius.lg)
+                    .accessibilityLabel("Spot photo")
                 }
                 
                 // Ratings and Info
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
                     // WiFi Rating
                     HStack {
                         Text("WiFi Rating:")
+                            .font(ThemeManager.Typography.dynamicHeadline())
                             .fontWeight(.semibold)
+                            .foregroundColor(ThemeManager.Colors.textPrimary)
                         Text(spot.wifiRatingStars)
-                            .foregroundColor(.yellow)
+                            .font(ThemeManager.Typography.dynamicBody())
+                            .foregroundColor(ThemeManager.Colors.warning)
                         Spacer()
                     }
+                    .accessibilityLabel("WiFi rating: \(spot.wifiRating) out of 5 stars")
                     
                     // Noise Rating
                     HStack {
                         Text("Noise Level:")
+                            .font(ThemeManager.Typography.dynamicHeadline())
                             .fontWeight(.semibold)
+                            .foregroundColor(ThemeManager.Colors.textPrimary)
                         Text(spot.noiseRating ?? "Low")
+                            .font(ThemeManager.Typography.dynamicBody())
+                            .foregroundColor(ThemeManager.Colors.textSecondary)
                         Spacer()
                     }
+                    .accessibilityLabel("Noise level: \(spot.noiseRating ?? "Low")")
                     
                     // Outlets
                     HStack {
                         Text("Outlets:")
+                            .font(ThemeManager.Typography.dynamicHeadline())
                             .fontWeight(.semibold)
+                            .foregroundColor(ThemeManager.Colors.textPrimary)
                         Image(systemName: spot.outlets ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundColor(spot.outlets ? .green : .red)
+                            .foregroundColor(spot.outlets ? ThemeManager.Colors.success : ThemeManager.Colors.error)
+                            .font(ThemeManager.Typography.dynamicBody())
                         Text(spot.outlets ? "Available" : "Not Available")
+                            .font(ThemeManager.Typography.dynamicBody())
+                            .foregroundColor(ThemeManager.Colors.textSecondary)
                         Spacer()
                     }
+                    .accessibilityLabel("Outlets: \(spot.outlets ? "Available" : "Not Available")")
                     
                     // Distance
                     if let distance = locationService.getFormattedDistance(from: spot) {
                         HStack {
                             Text("Distance:")
+                                .font(ThemeManager.Typography.dynamicHeadline())
                                 .fontWeight(.semibold)
+                                .foregroundColor(ThemeManager.Colors.textPrimary)
                             Text(distance)
+                                .font(ThemeManager.Typography.dynamicBody())
+                                .foregroundColor(ThemeManager.Colors.textSecondary)
                             Spacer()
                         }
+                        .accessibilityLabel("Distance: \(distance)")
                     }
                 }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
+                .padding(ThemeManager.Spacing.md)
+                .background(ThemeManager.Colors.surface)
+                .cornerRadius(ThemeManager.CornerRadius.lg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.lg)
+                        .stroke(ThemeManager.Colors.border, lineWidth: 1)
+                )
                 
                 // Community Ratings Section
                 AverageRatingsView(spot: spot)
                 
                 // Action Buttons
-                VStack(spacing: 12) {
+                VStack(spacing: ThemeManager.Spacing.md) {
                     // Rate This Spot Button
                     Button(action: {
                         showingRatingForm = true
@@ -111,13 +139,10 @@ struct SpotDetailView: View {
                             Image(systemName: "star.fill")
                             Text("Rate This Spot")
                         }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .cornerRadius(12)
+                        .themedButton(style: .primary)
                     }
+                    .accessibilityLabel("Rate this spot")
+                    .accessibilityHint("Double tap to open rating form")
                     
                     // Share This Spot Button
                     Button(action: {
@@ -127,19 +152,10 @@ struct SpotDetailView: View {
                             Image(systemName: "square.and.arrow.up")
                             Text("Share This Spot")
                         }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.purple, Color.pink]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(12)
+                        .themedButton(style: .secondary)
                     }
+                    .accessibilityLabel("Share this spot")
+                    .accessibilityHint("Double tap to open sharing options")
                 }
                 
                 // User Tips Section

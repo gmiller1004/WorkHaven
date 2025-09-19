@@ -64,8 +64,8 @@ struct SpotSearchView: View {
             VStack(spacing: 0) {
                 // Search Bar
                 SearchBar(text: $searchText)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+                    .padding(.horizontal, ThemeManager.Spacing.md)
+                    .padding(.top, ThemeManager.Spacing.sm)
                 
                 // Filter Toggle Bar
                 FilterToggleBar(
@@ -74,13 +74,15 @@ struct SpotSearchView: View {
                     outletsOnly: $outletsOnly,
                     showingFilters: $showingFilters
                 )
-                .padding(.horizontal)
-                .padding(.vertical, 8)
+                .padding(.horizontal, ThemeManager.Spacing.md)
+                .padding(.vertical, ThemeManager.Spacing.sm)
                 
                 // Results List
                 SpotSearchResultsView(spots: filteredSpots)
             }
+            .background(ThemeManager.Colors.background)
             .navigationTitle("Search Spots")
+            .navigationBarTitleDisplayMode(.large)
             .onAppear {
                 updateFilteredSpots()
             }
@@ -123,22 +125,32 @@ struct SearchBar: View {
     var body: some View {
         HStack {
             Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
+                .foregroundColor(ThemeManager.Colors.textSecondary)
+                .font(ThemeManager.Typography.dynamicBody())
             
             TextField("Search spots...", text: $text)
+                .font(ThemeManager.Typography.dynamicBody())
                 .textFieldStyle(PlainTextFieldStyle())
+                .accessibilityLabel("Search work spots")
+                .accessibilityHint("Enter spot name, address, or tips to search")
             
             if !text.isEmpty {
                 Button(action: { text = "" }) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(ThemeManager.Colors.textSecondary)
+                        .font(ThemeManager.Typography.dynamicBody())
                 }
+                .accessibilityLabel("Clear search")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
+        .padding(.horizontal, ThemeManager.Spacing.md)
+        .padding(.vertical, ThemeManager.Spacing.sm)
+        .background(ThemeManager.Colors.surface)
+        .cornerRadius(ThemeManager.CornerRadius.md)
+        .overlay(
+            RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.md)
+                .stroke(ThemeManager.Colors.border, lineWidth: 1)
+        )
     }
 }
 
