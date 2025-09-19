@@ -30,6 +30,12 @@ struct ContentView: View {
                     Image(systemName: "map")
                     Text("Map")
                 }
+            
+            ImportView()
+                .tabItem {
+                    Image(systemName: "square.and.arrow.down")
+                    Text("Import")
+                }
         }
     }
 }
