@@ -42,6 +42,12 @@ struct ContentView: View {
                         Image(systemName: "icloud")
                         Text("Sync")
                     }
+                
+                SettingsView(context: viewContext)
+                    .tabItem {
+                        Image(systemName: "gear")
+                        Text("Settings")
+                    }
         }
     }
 }

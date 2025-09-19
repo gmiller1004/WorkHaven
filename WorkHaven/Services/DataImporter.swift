@@ -15,9 +15,14 @@ class DataImporter: ObservableObject {
     @Published var importStatus = ""
     
     private let managedObjectContext: NSManagedObjectContext
+    private var notificationManager: NotificationManager?
     
     init(context: NSManagedObjectContext) {
         self.managedObjectContext = context
+    }
+    
+    func setNotificationManager(_ manager: NotificationManager) {
+        self.notificationManager = manager
     }
     
     // MARK: - CSV Import Functions
@@ -215,8 +220,22 @@ class DataImporter: ObservableObject {
                 spot.outlets = determineOutletsAvailability(csvSpot.name, wifiRating: csvSpot.wifiRating)
                 spot.tips = generateTips(for: csvSpot)
                 spot.photoURL = csvSpot.photoURL
+                spot.lastModified = Date() // Set modification date for notifications
                 
                 importedCount += 1
+                
+                // Trigger notifications for new spots
+                DispatchQueue.main.async {
+                    self.notificationManager?.scheduleNewSpotNotification(for: spot)
+                    
+                    // Check if it's a hot spot
+                    if spot.wifiRating >= 4 {
+                        self.notificationManager?.scheduleHotSpotNotification(for: spot)
+                    }
+                    
+                    // Check if it's nearby for location-based notifications
+                    self.notificationManager?.scheduleLocationBasedNotification(for: spot)
+                }
                 
                 // Update progress
                 let progress = Double(index + 1) / Double(csvSpots.count)

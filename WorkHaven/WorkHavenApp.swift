@@ -13,11 +13,13 @@ struct WorkHavenApp: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var dataImporter: DataImporter
     @StateObject private var cloudKitManager: CloudKitManager
+    @StateObject private var notificationManager: NotificationManager
 
     init() {
         let context = PersistenceController.shared.container.viewContext
         self._dataImporter = StateObject(wrappedValue: DataImporter(context: context))
         self._cloudKitManager = StateObject(wrappedValue: CloudKitManager(context: context))
+        self._notificationManager = StateObject(wrappedValue: NotificationManager(context: context))
     }
 
     var body: some Scene {
@@ -34,6 +36,9 @@ struct WorkHavenApp: App {
     }
     
     private func checkAndImportData() {
+        // Connect notification manager to data importer
+        dataImporter.setNotificationManager(notificationManager)
+        
         // Check if we already have spots in the database
         let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
         fetchRequest.fetchLimit = 1
