@@ -99,6 +99,8 @@ class DataImporter: ObservableObject {
         // Skip header row
         let dataLines = Array(lines.dropFirst())
         var spots: [CSVSpot] = []
+        var validRowCount = 0
+        var errorCount = 0
         
         for (index, line) in dataLines.enumerated() {
             if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -107,23 +109,54 @@ class DataImporter: ObservableObject {
             
             let columns = parseCSVLine(line)
             guard columns.count >= 7 else {
-                print("Warning: Skipping line \(index + 2) - insufficient columns: \(line)")
+                print("❌ ERROR: Line \(index + 2) - Insufficient columns (expected 7, got \(columns.count)): \(line)")
+                errorCount += 1
+                continue
+            }
+            
+            let name = columns[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            let city = columns[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            let wifiRating = columns[2].trimmingCharacters(in: .whitespacesAndNewlines)
+            let noiseRating = columns[3].trimmingCharacters(in: .whitespacesAndNewlines)
+            let photoURL = columns[4].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : columns[4].trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Validate latitude and longitude
+            guard let latitude = Double(columns[5].trimmingCharacters(in: .whitespacesAndNewlines)),
+                  let longitude = Double(columns[6].trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                print("❌ ERROR: Line \(index + 2) - Invalid coordinates for '\(name)': lat='\(columns[5])', lng='\(columns[6])'")
+                errorCount += 1
+                continue
+            }
+            
+            // Validate coordinate ranges
+            guard isValidLatitude(latitude) && isValidLongitude(longitude) else {
+                print("❌ ERROR: Line \(index + 2) - Coordinates out of valid range for '\(name)': lat=\(latitude), lng=\(longitude)")
+                errorCount += 1
+                continue
+            }
+            
+            // Validate required fields
+            guard !name.isEmpty else {
+                print("❌ ERROR: Line \(index + 2) - Empty name field")
+                errorCount += 1
                 continue
             }
             
             let spot = CSVSpot(
-                name: columns[0].trimmingCharacters(in: .whitespacesAndNewlines),
-                city: columns[1].trimmingCharacters(in: .whitespacesAndNewlines),
-                wifiRating: columns[2].trimmingCharacters(in: .whitespacesAndNewlines),
-                noiseRating: columns[3].trimmingCharacters(in: .whitespacesAndNewlines),
-                photoURL: columns[4].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : columns[4].trimmingCharacters(in: .whitespacesAndNewlines),
-                latitude: Double(columns[5].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0.0,
-                longitude: Double(columns[6].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0.0
+                name: name,
+                city: city,
+                wifiRating: wifiRating,
+                noiseRating: noiseRating,
+                photoURL: photoURL,
+                latitude: latitude,
+                longitude: longitude
             )
             
             spots.append(spot)
+            validRowCount += 1
         }
         
+        print("📊 CSV Import Summary: \(validRowCount) valid rows, \(errorCount) errors")
         return spots
     }
     
@@ -154,15 +187,20 @@ class DataImporter: ObservableObject {
             importStatus = "Importing spots to Core Data..."
         }
         
+        var importedCount = 0
+        var skippedCount = 0
+        var errorCount = 0
+        
         for (index, csvSpot) in csvSpots.enumerated() {
-            // Check if spot already exists
+            // Enhanced deduplication: check by name AND address
             let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
-            fetchRequest.predicate = NSPredicate(format: "name == %@", csvSpot.name)
+            fetchRequest.predicate = NSPredicate(format: "name == %@ AND address == %@", csvSpot.name, csvSpot.city)
             
             do {
                 let existingSpots = try managedObjectContext.fetch(fetchRequest)
                 if !existingSpots.isEmpty {
-                    print("Spot '\(csvSpot.name)' already exists, skipping...")
+                    print("⚠️  WARNING: Spot '\(csvSpot.name)' in '\(csvSpot.city)' already exists, skipping...")
+                    skippedCount += 1
                     continue
                 }
                 
@@ -178,24 +216,27 @@ class DataImporter: ObservableObject {
                 spot.tips = generateTips(for: csvSpot)
                 spot.photoURL = csvSpot.photoURL
                 
+                importedCount += 1
+                
                 // Update progress
                 let progress = Double(index + 1) / Double(csvSpots.count)
                 await MainActor.run {
                     importProgress = progress
-                    importStatus = "Imported \(index + 1) of \(csvSpots.count) spots..."
+                    importStatus = "Imported \(importedCount) of \(csvSpots.count) spots... (Skipped: \(skippedCount))"
                 }
                 
             } catch {
-                print("Error creating spot '\(csvSpot.name)': \(error)")
+                print("❌ ERROR: Failed to create spot '\(csvSpot.name)': \(error)")
+                errorCount += 1
             }
         }
         
         // Save context
         do {
             try managedObjectContext.save()
-            print("Successfully saved \(csvSpots.count) spots to Core Data")
+            print("✅ Successfully saved \(importedCount) spots to Core Data (Skipped: \(skippedCount), Errors: \(errorCount))")
         } catch {
-            print("Error saving context: \(error)")
+            print("❌ ERROR: Failed to save context: \(error)")
         }
     }
     
@@ -349,6 +390,16 @@ class DataImporter: ObservableObject {
         for city in cities {
             await importWorkSpaces(for: city)
         }
+    }
+    
+    // MARK: - Validation Functions
+    
+    private func isValidLatitude(_ latitude: Double) -> Bool {
+        return latitude >= -90.0 && latitude <= 90.0
+    }
+    
+    private func isValidLongitude(_ longitude: Double) -> Bool {
+        return longitude >= -180.0 && longitude <= 180.0
     }
     
     // MARK: - Utility Functions
