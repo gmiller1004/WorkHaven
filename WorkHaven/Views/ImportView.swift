@@ -12,6 +12,8 @@ struct ImportView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var dataImporter: DataImporter
     @State private var showingClearAlert = false
+    @State private var selectedCity = "Boise"
+    @State private var availableCities: [String] = []
     
     init() {
         self._dataImporter = StateObject(wrappedValue: DataImporter(context: PersistenceController.shared.container.viewContext))
@@ -59,23 +61,60 @@ struct ImportView: View {
                     }
                 }
                 
+                // City Selection
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Select City")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    Picker("City", selection: $selectedCity) {
+                        ForEach(availableCities, id: \.self) { city in
+                            Text(city).tag(city)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                }
+                
                 // Action Buttons
                 VStack(spacing: 16) {
                     // Import Button
                     Button(action: {
                         Task {
-                            await dataImporter.importBoiseWorkSpaces()
+                            await dataImporter.importWorkSpaces(for: selectedCity)
                         }
                     }) {
                         HStack {
                             Image(systemName: "square.and.arrow.down")
-                            Text("Import Boise Work Spaces")
+                            Text("Import \(selectedCity) Work Spaces")
                         }
                         .font(.headline)
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(dataImporter.isImporting ? Color.gray : Color.blue)
+                        .cornerRadius(12)
+                    }
+                    .disabled(dataImporter.isImporting)
+                    
+                    // Import All Button
+                    Button(action: {
+                        Task {
+                            await dataImporter.importAllAvailableCities()
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "square.and.arrow.down.on.square")
+                            Text("Import All Cities")
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue.opacity(0.1))
                         .cornerRadius(12)
                     }
                     .disabled(dataImporter.isImporting)
@@ -121,6 +160,12 @@ struct ImportView: View {
                 Spacer()
             }
             .padding(.top, 20)
+            .onAppear {
+                availableCities = dataImporter.getAvailableCities()
+                if availableCities.isEmpty {
+                    availableCities = ["Boise"] // Fallback
+                }
+            }
             .navigationTitle("Data Import")
             .navigationBarTitleDisplayMode(.inline)
             .alert("Clear All Spots", isPresented: $showingClearAlert) {

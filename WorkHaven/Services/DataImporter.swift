@@ -22,7 +22,16 @@ class DataImporter: ObservableObject {
     
     // MARK: - CSV Import Functions
     
+    func importWorkSpaces(for city: String) async {
+        let fileName = "\(city)_Work_Spots"
+        await importWorkSpaces(from: fileName)
+    }
+    
     func importBoiseWorkSpaces(from fileName: String = "Boise_Work_Spots") async {
+        await importWorkSpaces(from: fileName)
+    }
+    
+    private func importWorkSpaces(from fileName: String) async {
         await MainActor.run {
             isImporting = true
             importProgress = 0.0
@@ -316,6 +325,30 @@ class DataImporter: ObservableObject {
             CSVSpot(name: "PINE", city: "Boise ID", wifiRating: "Available", noiseRating: "Low", photoURL: "https://pinecoffeesupply.com/pages/boise-id", latitude: 43.6175, longitude: -116.2063),
             CSVSpot(name: "Zero Six Coffee Fix", city: "Boise ID", wifiRating: "Available", noiseRating: "Medium", photoURL: "https://boise.citycast.fm/best/coffee-shops-study-remote-work", latitude: 43.6121, longitude: -116.2110)
         ]
+    }
+    
+    // MARK: - City Management
+    
+    func getAvailableCities() -> [String] {
+        // Get list of CSV files in the app bundle
+        let fileManager = FileManager.default
+        guard let bundlePath = Bundle.main.resourcePath else { return [] }
+        
+        do {
+            let files = try fileManager.contentsOfDirectory(atPath: bundlePath)
+            let csvFiles = files.filter { $0.hasSuffix("_Work_Spots.csv") }
+            return csvFiles.map { $0.replacingOccurrences(of: "_Work_Spots.csv", with: "") }
+        } catch {
+            print("Error reading bundle directory: \(error)")
+            return []
+        }
+    }
+    
+    func importAllAvailableCities() async {
+        let cities = getAvailableCities()
+        for city in cities {
+            await importWorkSpaces(for: city)
+        }
     }
     
     // MARK: - Utility Functions
