@@ -14,10 +14,35 @@ struct PersistenceController {
     static let preview: PersistenceController = {
         let result = PersistenceController(inMemory: true)
         let viewContext = result.container.viewContext
+        
+        // Create sample spots
+        let sampleSpots: [(name: String, address: String, latitude: Double, longitude: Double, wifiRating: Int16, noiseRating: String, outlets: Bool, tips: String?, photoURL: String?)] = [
+            (name: "Blue Bottle Coffee", address: "66 Mint St, San Francisco, CA", latitude: 37.7749, longitude: -122.4194, wifiRating: 4, noiseRating: "Low", outlets: true, tips: "Great coffee and fast wifi", photoURL: nil),
+            (name: "Philz Coffee", address: "3101 24th St, San Francisco, CA", latitude: 37.7521, longitude: -122.4180, wifiRating: 5, noiseRating: "Medium", outlets: true, tips: "Amazing coffee blends", photoURL: nil),
+            (name: "Ritual Coffee", address: "1026 Valencia St, San Francisco, CA", latitude: 37.7575, longitude: -122.4219, wifiRating: 3, noiseRating: "High", outlets: false, tips: "Popular spot, can get crowded", photoURL: nil),
+            (name: "Sightglass Coffee", address: "270 7th St, San Francisco, CA", latitude: 37.7749, longitude: -122.4194, wifiRating: 4, noiseRating: "Low", outlets: true, tips: "Great for remote work", photoURL: nil),
+            (name: "Four Barrel Coffee", address: "375 Valencia St, San Francisco, CA", latitude: 37.7611, longitude: -122.4219, wifiRating: 3, noiseRating: "Medium", outlets: true, tips: "Good coffee, limited seating", photoURL: nil)
+        ]
+        
+        for spotData in sampleSpots {
+            let spot = Spot(context: viewContext)
+            spot.name = spotData.name
+            spot.address = spotData.address
+            spot.latitude = spotData.latitude
+            spot.longitude = spotData.longitude
+            spot.wifiRating = spotData.wifiRating
+            spot.noiseRating = spotData.noiseRating
+            spot.outlets = spotData.outlets
+            spot.tips = spotData.tips
+            spot.photoURL = spotData.photoURL
+        }
+        
+        // Keep the original Item creation for compatibility
         for _ in 0..<10 {
             let newItem = Item(context: viewContext)
             newItem.timestamp = Date()
         }
+        
         do {
             try viewContext.save()
         } catch {

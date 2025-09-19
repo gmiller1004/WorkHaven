@@ -1,0 +1,60 @@
+WorkHaven Cursor Rules
+Language and Framework
+
+Use Swift 5.9+ and SwiftUI for all UI components.
+Use Core Data for local storage and CloudKit for iCloud syncing, mapping to Spot and UserRating entities.
+Avoid UIKit unless explicitly requested for ShareSheet integration.
+Use only native Apple frameworks: SwiftUI, Core Data, MapKit, CloudKit, StoreKit (for IAP), UserNotifications.
+
+Code Style
+
+Follow Swift API Design Guidelines: clear, expressive names, camelCase for variables/functions.
+Use 4-space indentation, matching Xcode default formatting.
+Include concise comments for each function/view explaining purpose (e.g., // Displays map with spot annotations).
+Avoid force-unwrapping (!); use if let or guard for safe optional handling.
+
+Project Structure
+
+Organize code into folders: Views (SwiftUI views), Models (Core Data entities), ViewModels (business logic), Services (data handling, networking).
+Name files descriptively (e.g., MapView.swift, DataImporter.swift) as per prompt instructions.
+Use @main struct for app entry point, integrating with ContentView as root view.
+
+Dependencies
+
+Do not include external libraries (e.g., Alamofire, Realm) unless explicitly approved.
+Rely on native frameworks to keep MVP lightweight.
+
+Error Handling
+
+Include try-catch blocks for Core Data and CloudKit operations (e.g., do { try context.save() } catch { print("Error: \(error)") }).
+Handle optionals with guard for early returns on invalid states.
+Log errors to console for debugging; avoid user-facing alerts unless specified.
+
+MVP Scope
+
+Generate code only for WorkHaven MVP features: spot discovery (MapKit, filters), ratings/insights (Core Data, anonymous submissions), social sharing (ShareSheet), notifications (APNs).
+Exclude advanced features (e.g., real-time crowd levels, user accounts) unless prompted.
+Optimize for up to 3,000 spots in Core Data for smooth map rendering.
+
+Accessibility
+
+Add accessibility labels and traits for SwiftUI views (e.g., .accessibilityLabel("Map of work spots")).
+Support Dynamic Type and VoiceOver for all UI elements.
+Use high-contrast colors (blue #1E90FF, white #FFFFFF) for light/dark mode readability.
+
+Testing and Debugging
+
+Include XCTest stubs for critical logic (e.g., DataImporter, CloudKitManager, SpotSearchView).
+Add debug print statements for key operations (e.g., CSV parsing, CloudKit sync); exclude from production.
+Ensure compatibility with iOS 17+ (target iPhone 14 Pro, iPad Air simulators).
+
+File Output
+
+Generate standalone .swift files with names matching prompt (e.g., MapView.swift).
+Include header comment with file purpose and prompt reference (e.g., // Generated for WorkHaven Spot Search View, Week 1).
+Ensure code is compatible with Xcode 17+ and SwiftUI lifecycle.
+---
+description: "Rules for generating SwiftUI code for WorkHaven iOS app, ensuring Swift 5.9+, Core Data, MapKit, CloudKit, no external dependencies, and MVP-focused features."
+globs: ["*.swift"]
+alwaysApply: true
+---
