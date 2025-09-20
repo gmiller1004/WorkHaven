@@ -211,9 +211,11 @@ struct SpotDetailView: View {
                 }
                 
                 // Map Section
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
                     Text("Location")
-                        .font(.headline)
+                        .font(ThemeManager.Typography.dynamicHeadline())
+                        .fontWeight(.semibold)
+                        .foregroundColor(ThemeManager.Colors.textPrimary)
                     
                     Map(coordinateRegion: .constant(MKCoordinateRegion(
                         center: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude),
@@ -222,7 +224,20 @@ struct SpotDetailView: View {
                         MapPin(coordinate: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude))
                     }
                     .frame(height: 200)
-                    .cornerRadius(12)
+                    .cornerRadius(ThemeManager.CornerRadius.lg)
+                    
+                    // Navigate to Spot Button
+                    Button(action: {
+                        openInAppleMaps()
+                    }) {
+                        HStack {
+                            Image(systemName: "location.fill")
+                            Text("Navigate to Spot")
+                        }
+                        .themedButton(style: .primary)
+                    }
+                    .accessibilityLabel("Navigate to spot")
+                    .accessibilityHint("Double tap to open Apple Maps with navigation to this spot")
                 }
             }
             .padding()
@@ -265,6 +280,17 @@ struct SpotDetailView: View {
         userTips = ""
     }
     
+    private func openInAppleMaps() {
+        let coordinate = CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude)
+        let placemark = MKPlacemark(coordinate: coordinate)
+        let mapItem = MKMapItem(placemark: placemark)
+        mapItem.name = spot.name ?? "Work Spot"
+        
+        // Open in Apple Maps with navigation
+        mapItem.openInMaps(launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+        ])
+    }
     
     private func saveUserTips() {
         // Append user tips to existing tips
