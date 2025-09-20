@@ -54,7 +54,7 @@ struct SpotDetailView: View {
                     AsyncImage(url: URL(string: photoURL)) { image in
                         image
                             .resizable()
-                            .aspectRatio(contentMode: .fill)
+                            .aspectRatio(contentMode: .fit)
                     } placeholder: {
                         Rectangle()
                             .fill(ThemeManager.Colors.background)
@@ -64,7 +64,7 @@ struct SpotDetailView: View {
                                     .foregroundColor(ThemeManager.Colors.textSecondary)
                             )
                     }
-                    .frame(height: 200)
+                    .frame(maxWidth: .infinity, maxHeight: 200)
                     .clipped()
                     .cornerRadius(ThemeManager.CornerRadius.lg)
                     .accessibilityLabel("Spot photo")
@@ -97,7 +97,8 @@ struct SpotDetailView: View {
                 // Map Section
                 MapSection(spot: spot, openInAppleMaps: openInAppleMaps)
             }
-            .padding()
+            .padding(.horizontal, ThemeManager.Spacing.md)
+            .padding(.vertical, ThemeManager.Spacing.sm)
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
