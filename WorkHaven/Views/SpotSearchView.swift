@@ -24,6 +24,7 @@ struct SpotSearchView: View {
     @State private var selectedCity = "Boise"
     @State private var sortByRatingOnly = false
     @State private var showingLocationToast = false
+    @State private var showAllCities = false
     
     // Default location (Boise, ID) as fallback
     private let defaultLocation = CLLocation(latitude: 43.6150, longitude: -116.2023)
@@ -39,9 +40,11 @@ struct SpotSearchView: View {
         
         var predicates: [NSPredicate] = []
         
-        // City filter
-        let cityPredicate = NSPredicate(format: "address CONTAINS[cd] %@", selectedCity)
-        predicates.append(cityPredicate)
+        // City filter (unless showing all cities)
+        if !showAllCities {
+            let cityPredicate = NSPredicate(format: "address CONTAINS[cd] %@", selectedCity)
+            predicates.append(cityPredicate)
+        }
         
         // Search text filter
         if !searchText.isEmpty {
@@ -95,14 +98,15 @@ struct SpotSearchView: View {
                     selectedOverallRating: $selectedOverallRating,
                     showingFilters: $showingFilters,
                     selectedCity: $selectedCity,
-                    sortByRatingOnly: $sortByRatingOnly
+                    sortByRatingOnly: $sortByRatingOnly,
+                    showAllCities: $showAllCities
                 )
                 .padding(.horizontal, ThemeManager.Spacing.md)
                 .padding(.vertical, ThemeManager.Spacing.sm)
                 
                 // Results List
                 if filteredSpots.isEmpty {
-                    NoSpotsFoundView(selectedCity: selectedCity)
+                    NoSpotsFoundView(selectedCity: showAllCities ? "All Cities" : selectedCity)
                 } else {
                     SpotSearchResultsView(
                         spots: filteredSpots, 
@@ -152,7 +156,8 @@ struct SpotSearchView: View {
                     outletsOnly: $outletsOnly,
                     selectedOverallRating: $selectedOverallRating,
                     selectedCity: $selectedCity,
-                    sortByRatingOnly: $sortByRatingOnly
+                    sortByRatingOnly: $sortByRatingOnly,
+                    showAllCities: $showAllCities
                 )
             }
             .toast(isPresented: $showingLocationToast) {
@@ -267,24 +272,66 @@ struct FilterToggleBar: View {
     @Binding var showingFilters: Bool
     @Binding var selectedCity: String
     @Binding var sortByRatingOnly: Bool
+    @Binding var showAllCities: Bool
     
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: ThemeManager.Spacing.sm) {
                 // City Filter
                 Menu {
-                    Button("Boise") { selectedCity = "Boise" }
-                    Button("Austin") { selectedCity = "Austin" }
-                    Button("Seattle") { selectedCity = "Seattle" }
+                    Button(action: { 
+                        showAllCities = true
+                        selectedCity = "All Cities"
+                    }) {
+                        HStack {
+                            Text("All Cities")
+                            if showAllCities {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                    Button(action: { 
+                        showAllCities = false
+                        selectedCity = "Boise"
+                    }) {
+                        HStack {
+                            Text("Boise")
+                            if !showAllCities && selectedCity == "Boise" {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                    Button(action: { 
+                        showAllCities = false
+                        selectedCity = "Austin"
+                    }) {
+                        HStack {
+                            Text("Austin")
+                            if !showAllCities && selectedCity == "Austin" {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                    Button(action: { 
+                        showAllCities = false
+                        selectedCity = "Seattle"
+                    }) {
+                        HStack {
+                            Text("Seattle")
+                            if !showAllCities && selectedCity == "Seattle" {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
                 } label: {
                     FilterChip(
-                        title: selectedCity,
+                        title: showAllCities ? "All Cities" : selectedCity,
                         icon: "location",
                         isActive: true,
                         color: ThemeManager.Colors.primary
                     )
                 }
-                .accessibilityLabel("City filter: \(selectedCity)")
+                .accessibilityLabel("City filter: \(showAllCities ? "All Cities" : selectedCity)")
                 
                 // Sort Toggle
                 Button(action: { sortByRatingOnly.toggle() }) {
@@ -516,6 +563,7 @@ struct FilterDetailView: View {
     @Binding var selectedOverallRating: Double
     @Binding var selectedCity: String
     @Binding var sortByRatingOnly: Bool
+    @Binding var showAllCities: Bool
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -550,13 +598,67 @@ struct FilterDetailView: View {
                                     .foregroundColor(ThemeManager.Colors.textPrimary)
                             }
                             
-                            Picker("City", selection: $selectedCity) {
-                                Text("Boise").tag("Boise")
-                                Text("Austin").tag("Austin")
-                                Text("Seattle").tag("Seattle")
+                            VStack(spacing: ThemeManager.Spacing.sm) {
+                                Button(action: { 
+                                    showAllCities = true
+                                    selectedCity = "All Cities"
+                                }) {
+                                    HStack {
+                                        Image(systemName: showAllCities ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(ThemeManager.Colors.accent)
+                                        Text("All Cities")
+                                            .font(ThemeManager.Typography.dynamicBody())
+                                            .foregroundColor(ThemeManager.Colors.textPrimary)
+                                        Spacer()
+                                    }
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                
+                                Button(action: { 
+                                    showAllCities = false
+                                    selectedCity = "Boise"
+                                }) {
+                                    HStack {
+                                        Image(systemName: (!showAllCities && selectedCity == "Boise") ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(ThemeManager.Colors.accent)
+                                        Text("Boise")
+                                            .font(ThemeManager.Typography.dynamicBody())
+                                            .foregroundColor(ThemeManager.Colors.textPrimary)
+                                        Spacer()
+                                    }
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                
+                                Button(action: { 
+                                    showAllCities = false
+                                    selectedCity = "Austin"
+                                }) {
+                                    HStack {
+                                        Image(systemName: (!showAllCities && selectedCity == "Austin") ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(ThemeManager.Colors.accent)
+                                        Text("Austin")
+                                            .font(ThemeManager.Typography.dynamicBody())
+                                            .foregroundColor(ThemeManager.Colors.textPrimary)
+                                        Spacer()
+                                    }
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                
+                                Button(action: { 
+                                    showAllCities = false
+                                    selectedCity = "Seattle"
+                                }) {
+                                    HStack {
+                                        Image(systemName: (!showAllCities && selectedCity == "Seattle") ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(ThemeManager.Colors.accent)
+                                        Text("Seattle")
+                                            .font(ThemeManager.Typography.dynamicBody())
+                                            .foregroundColor(ThemeManager.Colors.textPrimary)
+                                        Spacer()
+                                    }
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
-                            .pickerStyle(SegmentedPickerStyle())
-                            .accessibilityLabel("City picker")
                         }
                         .padding()
                         .background(ThemeManager.Colors.surface)
@@ -744,6 +846,7 @@ struct FilterDetailView: View {
         selectedOverallRating = 1.0
         selectedCity = "Boise"
         sortByRatingOnly = false
+        showAllCities = false
     }
 }
 

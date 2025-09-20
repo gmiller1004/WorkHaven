@@ -21,6 +21,7 @@ struct SpotListView: View {
     @State private var selectedCity = "Boise"
     @State private var showingLocationToast = false
     @State private var sortByRatingOnly = false
+    @State private var showAllCities = false
     
     // Default location (Boise, ID) as fallback
     private let defaultLocation = CLLocation(latitude: 43.6150, longitude: -116.2023)
@@ -32,9 +33,11 @@ struct SpotListView: View {
     var filteredSpots: [Spot] {
         var spots = viewModel.spots
         
-        // Filter by city
-        spots = spots.filter { spot in
-            spot.address?.contains(selectedCity) == true
+        // Filter by city (unless showing all cities)
+        if !showAllCities {
+            spots = spots.filter { spot in
+                spot.address?.contains(selectedCity) == true
+            }
         }
         
         // Apply search filter
@@ -111,7 +114,7 @@ struct SpotListView: View {
                     ProgressView("Loading spots...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredSpots.isEmpty {
-                    NoSpotsFoundView(selectedCity: selectedCity)
+                    NoSpotsFoundView(selectedCity: showAllCities ? "All Cities" : selectedCity)
                 } else {
                     List {
                         ForEach(filteredSpots) { spot in
@@ -146,11 +149,56 @@ struct SpotListView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
+                        // Show All Option
+                        Section("View") {
+                            Button(action: { 
+                                showAllCities = true
+                                selectedCity = "All Cities"
+                            }) {
+                                HStack {
+                                    Text("Show All Cities")
+                                    if showAllCities {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                        
                         // City Selection
                         Section("City") {
-                            Button("Boise") { selectedCity = "Boise" }
-                            Button("Austin") { selectedCity = "Austin" }
-                            Button("Seattle") { selectedCity = "Seattle" }
+                            Button(action: { 
+                                showAllCities = false
+                                selectedCity = "Boise"
+                            }) {
+                                HStack {
+                                    Text("Boise")
+                                    if !showAllCities && selectedCity == "Boise" {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                            Button(action: { 
+                                showAllCities = false
+                                selectedCity = "Austin"
+                            }) {
+                                HStack {
+                                    Text("Austin")
+                                    if !showAllCities && selectedCity == "Austin" {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                            Button(action: { 
+                                showAllCities = false
+                                selectedCity = "Seattle"
+                            }) {
+                                HStack {
+                                    Text("Seattle")
+                                    if !showAllCities && selectedCity == "Seattle" {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
                         }
                         
                         Divider()
