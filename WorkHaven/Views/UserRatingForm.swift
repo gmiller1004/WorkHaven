@@ -10,6 +10,7 @@ import CoreData
 
 struct UserRatingForm: View {
     let spot: Spot
+    let viewModel: SpotViewModel
     @Environment(\.managedObjectContext) private var viewContext
     @State private var wifiRating: Int16 = 1
     @State private var noiseRating: String = "Low"
@@ -25,12 +26,18 @@ struct UserRatingForm: View {
             // Header
             VStack(alignment: .leading, spacing: 8) {
                 Text("Rate This Spot")
-                    .font(.title2)
+                    .font(ThemeManager.Typography.dynamicTitle2())
                     .fontWeight(.bold)
+                    .foregroundColor(ThemeManager.Colors.textPrimary)
                 
                 Text("Share your experience to help others")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(ThemeManager.Typography.dynamicSubheadline())
+                    .foregroundColor(ThemeManager.Colors.textSecondary)
+                
+                Text("Your rating helps refine the spot's quality score.")
+                    .font(ThemeManager.Typography.dynamicCaption())
+                    .foregroundColor(ThemeManager.Colors.accent)
+                    .italic()
             }
             
             // WiFi Rating
@@ -174,20 +181,28 @@ struct UserRatingForm: View {
     private func submitRating() {
         isSubmitting = true
         
-        let newRating = UserRating(context: viewContext)
-        newRating.wifiRating = wifiRating
-        newRating.noiseRating = noiseRating
-        newRating.outlets = outlets
-        newRating.tip = tip.isEmpty ? nil : tip
-        newRating.timestamp = Date()
-        newRating.spot = spot
+        // Add user rating using SpotViewModel
+        viewModel.addUserRating(
+            to: spot,
+            wifiRating: wifiRating,
+            noiseRating: noiseRating,
+            outlets: outlets,
+            tips: tip.isEmpty ? nil : tip
+        )
         
-        do {
-            try viewContext.save()
-            showingSuccessAlert = true
-        } catch {
-            print("Error saving rating: \(error)")
-            isSubmitting = false
+        // Update spot's lastModified to trigger CloudKit sync
+        spot.lastModified = Date()
+        
+        // Save context and trigger CloudKit sync
+        viewModel.saveContext()
+        
+        // Trigger CloudKit sync in background
+        Task {
+            // Note: CloudKit sync would be triggered automatically by the saveContext
+            // but we can also explicitly trigger it if needed
+            await MainActor.run {
+                showingSuccessAlert = true
+            }
         }
     }
     
@@ -203,6 +218,6 @@ struct UserRatingForm: View {
 #Preview {
     let context = PersistenceController.preview.container.viewContext
     let spot = Spot.createSampleSpot(in: context)
-    return UserRatingForm(spot: spot)
+    return UserRatingForm(spot: spot, viewModel: SpotViewModel(context: context))
         .environment(\.managedObjectContext, context)
 }

@@ -3,6 +3,7 @@
 //  WorkHaven
 //
 //  Created by Greg Miller on 9/19/25.
+//  Updated with comprehensive rating breakdown, progress bars, and enhanced user rating functionality
 //
 
 import SwiftUI
@@ -38,6 +39,12 @@ struct SpotDetailView: View {
                         .accessibilityLabel("Address: \(spot.address ?? "No address")")
                 }
                 
+                // Overall Rating Section
+                OverallRatingSection(spot: spot, viewModel: viewModel)
+                
+                // Rating Breakdown Section
+                RatingBreakdownSection(spot: spot, viewModel: viewModel)
+                
                 // Photo Section
                 if spot.hasPhoto, let photoURL = spot.photoURL {
                     AsyncImage(url: URL(string: photoURL)) { image in
@@ -59,202 +66,48 @@ struct SpotDetailView: View {
                     .accessibilityLabel("Spot photo")
                 }
                 
-                // Ratings and Info
-                VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
-                    // WiFi Rating
-                    HStack {
-                        Text("WiFi Rating:")
-                            .font(ThemeManager.Typography.dynamicHeadline())
-                            .fontWeight(.semibold)
-                            .foregroundColor(ThemeManager.Colors.textPrimary)
-                        Text(spot.wifiRatingStars)
-                            .font(ThemeManager.Typography.dynamicBody())
-                            .foregroundColor(ThemeManager.Colors.warning)
-                        Spacer()
-                    }
-                    .accessibilityLabel("WiFi rating: \(spot.wifiRating) out of 5 stars")
-                    
-                    // Noise Rating
-                    HStack {
-                        Text("Noise Level:")
-                            .font(ThemeManager.Typography.dynamicHeadline())
-                            .fontWeight(.semibold)
-                            .foregroundColor(ThemeManager.Colors.textPrimary)
-                        Text(spot.noiseRating ?? "Low")
-                            .font(ThemeManager.Typography.dynamicBody())
-                            .foregroundColor(ThemeManager.Colors.textSecondary)
-                        Spacer()
-                    }
-                    .accessibilityLabel("Noise level: \(spot.noiseRating ?? "Low")")
-                    
-                    // Outlets
-                    HStack {
-                        Text("Outlets:")
-                            .font(ThemeManager.Typography.dynamicHeadline())
-                            .fontWeight(.semibold)
-                            .foregroundColor(ThemeManager.Colors.textPrimary)
-                        Image(systemName: spot.outlets ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundColor(spot.outlets ? ThemeManager.Colors.success : ThemeManager.Colors.error)
-                            .font(ThemeManager.Typography.dynamicBody())
-                        Text(spot.outlets ? "Available" : "Not Available")
-                            .font(ThemeManager.Typography.dynamicBody())
-                            .foregroundColor(ThemeManager.Colors.textSecondary)
-                        Spacer()
-                    }
-                    .accessibilityLabel("Outlets: \(spot.outlets ? "Available" : "Not Available")")
-                    
-                    // Distance
-                    if let distance = locationService.getFormattedDistance(from: spot) {
-                        HStack {
-                            Text("Distance:")
-                                .font(ThemeManager.Typography.dynamicHeadline())
-                                .fontWeight(.semibold)
-                                .foregroundColor(ThemeManager.Colors.textPrimary)
-                            Text(distance)
-                                .font(ThemeManager.Typography.dynamicBody())
-                                .foregroundColor(ThemeManager.Colors.textSecondary)
-                            Spacer()
-                        }
-                        .accessibilityLabel("Distance: \(distance)")
-                    }
-                }
-                .padding(ThemeManager.Spacing.md)
-                .background(ThemeManager.Colors.surface)
-                .cornerRadius(ThemeManager.CornerRadius.lg)
-                .overlay(
-                    RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.lg)
-                        .stroke(ThemeManager.Colors.border, lineWidth: 1)
-                )
+                // Basic Info Section
+                BasicInfoSection(spot: spot, locationService: locationService)
                 
                 // Community Ratings Section
                 AverageRatingsView(spot: spot)
                 
                 // Action Buttons
-                VStack(spacing: ThemeManager.Spacing.md) {
-                    // Rate This Spot Button
-                    Button(action: {
-                        showingRatingForm = true
-                    }) {
-                        HStack {
-                            Image(systemName: "star.fill")
-                            Text("Rate This Spot")
-                        }
-                        .themedButton(style: .primary)
-                    }
-                    .accessibilityLabel("Rate this spot")
-                    .accessibilityHint("Double tap to open rating form")
-                    
-                    // Share This Spot Button
-                    Button(action: {
-                        showingShareView = true
-                    }) {
-                        HStack {
-                            Image(systemName: "square.and.arrow.up")
-                            Text("Share This Spot")
-                        }
-                        .themedButton(style: .secondary)
-                    }
-                    .accessibilityLabel("Share this spot")
-                    .accessibilityHint("Double tap to open sharing options")
-                }
+                ActionButtonsSection(
+                    showingRatingForm: $showingRatingForm,
+                    showingShareView: $showingShareView
+                )
                 
                 // User Tips Section
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Your Tips")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                        
-                        Spacer()
-                        
-                        Button(isEditingTips ? "Save" : "Add Tips") {
-                            if isEditingTips {
-                                saveUserTips()
-                            } else {
-                                isEditingTips = true
-                            }
-                        }
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                    }
-                    
-                    if isEditingTips {
-                        TextField("Share your experience at this spot...", text: $userTips, axis: .vertical)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .lineLimit(3...6)
-                    } else if !userTips.isEmpty {
-                        Text(userTips)
-                            .font(.body)
-                            .padding(.vertical, 4)
-                    } else {
-                        Text("Tap 'Add Tips' to share your experience")
-                            .font(.body)
-                            .foregroundColor(.secondary)
-                            .italic()
-                    }
-                }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
+                UserTipsSection(
+                    userTips: $userTips,
+                    isEditingTips: $isEditingTips,
+                    saveUserTips: saveUserTips
+                )
                 
                 // Original Tips Section (if exists)
                 if let tips = spot.tips, !tips.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Original Tips")
-                            .font(.headline)
-                        Text(tips)
-                            .font(.body)
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
+                    OriginalTipsSection(tips: tips)
                 }
                 
                 // Map Section
-                VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
-                    Text("Location")
-                        .font(ThemeManager.Typography.dynamicHeadline())
-                        .fontWeight(.semibold)
-                        .foregroundColor(ThemeManager.Colors.textPrimary)
-                    
-                    Map(coordinateRegion: .constant(MKCoordinateRegion(
-                        center: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude),
-                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                    )), annotationItems: [spot]) { spot in
-                        MapPin(coordinate: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude))
-                    }
-                    .frame(height: 200)
-                    .cornerRadius(ThemeManager.CornerRadius.lg)
-                    
-                    // Navigate to Spot Button
-                    Button(action: {
-                        openInAppleMaps()
-                    }) {
-                        HStack {
-                            Image(systemName: "location.fill")
-                            Text("Navigate to Spot")
-                        }
-                        .themedButton(style: .primary)
-                    }
-                    .accessibilityLabel("Navigate to spot")
-                    .accessibilityHint("Double tap to open Apple Maps with navigation to this spot")
-                }
+                MapSection(spot: spot, openInAppleMaps: openInAppleMaps)
             }
             .padding()
         }
         .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Edit") {
-                            showingEditView = true
-                        }
-                    }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Edit") {
+                    showingEditView = true
                 }
+            }
+        }
         .sheet(isPresented: $showingEditView) {
             EditSpotView(spot: spot, viewModel: viewModel)
         }
         .sheet(isPresented: $showingRatingForm) {
-            UserRatingForm(spot: spot)
+            UserRatingForm(spot: spot, viewModel: viewModel)
         }
         .sheet(isPresented: $showingShareView) {
             SpotShareView(spot: spot)
@@ -308,6 +161,449 @@ struct SpotDetailView: View {
             isEditingTips = false
             saveMessage = "Tips saved successfully!"
             showingSaveAlert = true
+        }
+    }
+}
+
+// MARK: - Overall Rating Section
+struct OverallRatingSection: View {
+    let spot: Spot
+    let viewModel: SpotViewModel
+    
+    var body: some View {
+        VStack(spacing: ThemeManager.Spacing.sm) {
+            Text("Overall Quality")
+                .font(ThemeManager.Typography.dynamicTitle2())
+                .fontWeight(.bold)
+                .foregroundColor(ThemeManager.Colors.textPrimary)
+            
+            HStack(spacing: ThemeManager.Spacing.sm) {
+                // Large 5-star display
+                HStack(spacing: 4) {
+                    ForEach(0..<5, id: \.self) { index in
+                        Image(systemName: starImageName(for: index))
+                            .font(.system(size: 32))
+                            .foregroundColor(ThemeManager.Colors.accent) // #F28C38
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Overall rating: \(String(format: "%.1f", viewModel.overallRating(for: spot))) out of 5 stars")
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(String(format: "%.1f", viewModel.overallRating(for: spot)))
+                        .font(ThemeManager.Typography.dynamicTitle1())
+                        .fontWeight(.bold)
+                        .foregroundColor(ThemeManager.Colors.textPrimary)
+                    
+                    Text(viewModel.ratingDescription(for: viewModel.overallRating(for: spot)))
+                        .font(ThemeManager.Typography.dynamicSubheadline())
+                        .foregroundColor(viewModel.ratingColor(for: viewModel.overallRating(for: spot)))
+                }
+            }
+            
+            if spot.userRatingCount > 0 {
+                Text("Based on \(spot.userRatingCount) user rating\(spot.userRatingCount == 1 ? "" : "s")")
+                    .font(ThemeManager.Typography.dynamicCaption())
+                    .foregroundColor(ThemeManager.Colors.textSecondary)
+            }
+        }
+        .padding(ThemeManager.Spacing.lg)
+        .background(ThemeManager.Colors.surface)
+        .cornerRadius(ThemeManager.CornerRadius.lg)
+        .overlay(
+            RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.lg)
+                .stroke(ThemeManager.Colors.border, lineWidth: 1)
+        )
+    }
+    
+    private func starImageName(for index: Int) -> String {
+        let rating = viewModel.overallRating(for: spot)
+        let fullStars = Int(rating)
+        let hasHalfStar = rating - Double(fullStars) >= 0.5
+        
+        if index < fullStars {
+            return "star.fill"
+        } else if index == fullStars && hasHalfStar {
+            return "star.lefthalf.fill"
+        } else {
+            return "star"
+        }
+    }
+}
+
+// MARK: - Rating Breakdown Section
+struct RatingBreakdownSection: View {
+    let spot: Spot
+    let viewModel: SpotViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
+            Text("Rating Breakdown")
+                .font(ThemeManager.Typography.dynamicTitle3())
+                .fontWeight(.bold)
+                .foregroundColor(ThemeManager.Colors.textPrimary)
+            
+            VStack(spacing: ThemeManager.Spacing.md) {
+                // Aggregate Rating (Default)
+                RatingBreakdownRow(
+                    title: "Default Quality",
+                    subtitle: "Based on WiFi, Noise, and Outlets",
+                    rating: spot.aggregateRating,
+                    color: ThemeManager.Colors.primary
+                )
+                
+                // User Average Rating
+                if let userRating = spot.averageUserRating {
+                    RatingBreakdownRow(
+                        title: "Community Rating",
+                        subtitle: "Based on \(spot.userRatingCount) user rating\(spot.userRatingCount == 1 ? "" : "s")",
+                        rating: userRating,
+                        color: ThemeManager.Colors.accent
+                    )
+                } else {
+                    RatingBreakdownRow(
+                        title: "Community Rating",
+                        subtitle: "No user ratings yet",
+                        rating: 0,
+                        color: ThemeManager.Colors.textSecondary,
+                        showStars: false
+                    )
+                }
+            }
+        }
+        .padding(ThemeManager.Spacing.md)
+        .background(ThemeManager.Colors.surface)
+        .cornerRadius(ThemeManager.CornerRadius.lg)
+        .overlay(
+            RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.lg)
+                .stroke(ThemeManager.Colors.border, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Rating Breakdown Row
+struct RatingBreakdownRow: View {
+    let title: String
+    let subtitle: String
+    let rating: Double
+    let color: Color
+    var showStars: Bool = true
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
+            HStack {
+                Text(title)
+                    .font(ThemeManager.Typography.dynamicHeadline())
+                    .foregroundColor(ThemeManager.Colors.textPrimary)
+                
+                Spacer()
+                
+                if showStars {
+                    Text(String(format: "%.1f", rating))
+                        .font(ThemeManager.Typography.dynamicTitle3())
+                        .fontWeight(.bold)
+                        .foregroundColor(color)
+                }
+            }
+            
+            Text(subtitle)
+                .font(ThemeManager.Typography.dynamicCaption())
+                .foregroundColor(ThemeManager.Colors.textSecondary)
+            
+            if showStars {
+                // Progress bar
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Rectangle()
+                            .fill(ThemeManager.Colors.border)
+                            .frame(height: 8)
+                            .cornerRadius(4)
+                        
+                        Rectangle()
+                            .fill(color)
+                            .frame(width: geometry.size.width * (rating / 5.0), height: 8)
+                            .cornerRadius(4)
+                    }
+                }
+                .frame(height: 8)
+                .accessibilityLabel("\(title): \(String(format: "%.1f", rating)) out of 5")
+                
+                // Star display
+                HStack(spacing: 2) {
+                    ForEach(0..<5, id: \.self) { index in
+                        Image(systemName: starImageName(for: index))
+                            .font(.caption)
+                            .foregroundColor(color)
+                    }
+                }
+                .accessibilityLabel("\(title): \(String(format: "%.1f", rating)) out of 5 stars")
+            }
+        }
+    }
+    
+    private func starImageName(for index: Int) -> String {
+        let fullStars = Int(rating)
+        let hasHalfStar = rating - Double(fullStars) >= 0.5
+        
+        if index < fullStars {
+            return "star.fill"
+        } else if index == fullStars && hasHalfStar {
+            return "star.lefthalf.fill"
+        } else {
+            return "star"
+        }
+    }
+}
+
+// MARK: - Basic Info Section
+struct BasicInfoSection: View {
+    let spot: Spot
+    let locationService: LocationService
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
+            Text("Spot Details")
+                .font(ThemeManager.Typography.dynamicTitle3())
+                .fontWeight(.bold)
+                .foregroundColor(ThemeManager.Colors.textPrimary)
+            
+            VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
+                // WiFi Rating
+                DetailRow(
+                    title: "WiFi",
+                    value: spot.wifiRatingStars,
+                    icon: "wifi",
+                    color: ThemeManager.Colors.primary
+                )
+                .accessibilityLabel("WiFi: \(spot.wifiRating) out of 5 stars")
+                
+                // Noise Rating
+                DetailRow(
+                    title: "Noise",
+                    value: spot.noiseRating ?? "Low",
+                    icon: "speaker.wave.2",
+                    color: noiseColor
+                )
+                .accessibilityLabel("Noise level: \(spot.noiseRating ?? "Low")")
+                
+                // Outlets
+                DetailRow(
+                    title: "Outlets",
+                    value: spot.outlets ? "Available" : "Not Available",
+                    icon: "powerplug",
+                    color: spot.outlets ? ThemeManager.Colors.success : ThemeManager.Colors.error
+                )
+                .accessibilityLabel("Outlets: \(spot.outlets ? "Available" : "Not Available")")
+                
+                // Distance
+                if let distance = locationService.getFormattedDistance(from: spot) {
+                    DetailRow(
+                        title: "Distance",
+                        value: distance,
+                        icon: "location",
+                        color: ThemeManager.Colors.textSecondary
+                    )
+                    .accessibilityLabel("Distance: \(distance)")
+                }
+            }
+        }
+        .padding(ThemeManager.Spacing.md)
+        .background(ThemeManager.Colors.surface)
+        .cornerRadius(ThemeManager.CornerRadius.lg)
+        .overlay(
+            RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.lg)
+                .stroke(ThemeManager.Colors.border, lineWidth: 1)
+        )
+    }
+    
+    private var noiseColor: Color {
+        switch spot.noiseRating?.lowercased() {
+        case "low":
+            return ThemeManager.Colors.success
+        case "medium":
+            return ThemeManager.Colors.warning
+        case "high":
+            return ThemeManager.Colors.error
+        default:
+            return ThemeManager.Colors.textSecondary
+        }
+    }
+}
+
+// MARK: - Detail Row
+struct DetailRow: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .font(ThemeManager.Typography.dynamicBody())
+                .frame(width: 20)
+            
+            Text(title + ":")
+                .font(ThemeManager.Typography.dynamicHeadline())
+                .fontWeight(.semibold)
+                .foregroundColor(ThemeManager.Colors.textPrimary)
+            
+            Text(value)
+                .font(ThemeManager.Typography.dynamicBody())
+                .foregroundColor(ThemeManager.Colors.textSecondary)
+            
+            Spacer()
+        }
+    }
+}
+
+// MARK: - Action Buttons Section
+struct ActionButtonsSection: View {
+    @Binding var showingRatingForm: Bool
+    @Binding var showingShareView: Bool
+    
+    var body: some View {
+        VStack(spacing: ThemeManager.Spacing.md) {
+            // Rate This Spot Button
+            Button(action: {
+                showingRatingForm = true
+            }) {
+                HStack {
+                    Image(systemName: "star.fill")
+                    Text("Rate This Spot")
+                }
+                .themedButton(style: .primary)
+            }
+            .accessibilityLabel("Rate this spot")
+            .accessibilityHint("Double tap to open rating form")
+            
+            // Share This Spot Button
+            Button(action: {
+                showingShareView = true
+            }) {
+                HStack {
+                    Image(systemName: "square.and.arrow.up")
+                    Text("Share This Spot")
+                }
+                .themedButton(style: .secondary)
+            }
+            .accessibilityLabel("Share this spot")
+            .accessibilityHint("Double tap to open sharing options")
+        }
+    }
+}
+
+// MARK: - User Tips Section
+struct UserTipsSection: View {
+    @Binding var userTips: String
+    @Binding var isEditingTips: Bool
+    let saveUserTips: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
+            HStack {
+                Text("Your Tips")
+                    .font(ThemeManager.Typography.dynamicHeadline())
+                    .fontWeight(.semibold)
+                    .foregroundColor(ThemeManager.Colors.textPrimary)
+                
+                Spacer()
+                
+                Button(isEditingTips ? "Save" : "Add Tips") {
+                    if isEditingTips {
+                        saveUserTips()
+                    } else {
+                        isEditingTips = true
+                    }
+                }
+                .font(ThemeManager.Typography.dynamicCaption())
+                .foregroundColor(ThemeManager.Colors.primary)
+            }
+            
+            if isEditingTips {
+                TextField("Share your experience at this spot...", text: $userTips, axis: .vertical)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .lineLimit(3...6)
+                    .font(ThemeManager.Typography.dynamicBody())
+            } else if !userTips.isEmpty {
+                Text(userTips)
+                    .font(ThemeManager.Typography.dynamicBody())
+                    .foregroundColor(ThemeManager.Colors.textPrimary)
+                    .padding(.vertical, 4)
+            } else {
+                Text("Tap 'Add Tips' to share your experience")
+                    .font(ThemeManager.Typography.dynamicBody())
+                    .foregroundColor(ThemeManager.Colors.textSecondary)
+                    .italic()
+            }
+        }
+        .padding(ThemeManager.Spacing.md)
+        .background(ThemeManager.Colors.surface)
+        .cornerRadius(ThemeManager.CornerRadius.lg)
+        .overlay(
+            RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.lg)
+                .stroke(ThemeManager.Colors.border, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Original Tips Section
+struct OriginalTipsSection: View {
+    let tips: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
+            Text("Original Tips")
+                .font(ThemeManager.Typography.dynamicHeadline())
+                .fontWeight(.semibold)
+                .foregroundColor(ThemeManager.Colors.textPrimary)
+            
+            Text(tips)
+                .font(ThemeManager.Typography.dynamicBody())
+                .foregroundColor(ThemeManager.Colors.textPrimary)
+        }
+        .padding(ThemeManager.Spacing.md)
+        .background(ThemeManager.Colors.surface)
+        .cornerRadius(ThemeManager.CornerRadius.lg)
+        .overlay(
+            RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.lg)
+                .stroke(ThemeManager.Colors.border, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Map Section
+struct MapSection: View {
+    let spot: Spot
+    let openInAppleMaps: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
+            Text("Location")
+                .font(ThemeManager.Typography.dynamicHeadline())
+                .fontWeight(.semibold)
+                .foregroundColor(ThemeManager.Colors.textPrimary)
+            
+            Map(coordinateRegion: .constant(MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude),
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            )), annotationItems: [spot]) { spot in
+                MapPin(coordinate: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude))
+            }
+            .frame(height: 200)
+            .cornerRadius(ThemeManager.CornerRadius.lg)
+            
+            // Navigate to Spot Button
+            Button(action: openInAppleMaps) {
+                HStack {
+                    Image(systemName: "location.fill")
+                    Text("Navigate to Spot")
+                }
+                .themedButton(style: .primary)
+            }
+            .accessibilityLabel("Navigate to spot")
+            .accessibilityHint("Double tap to open Apple Maps with navigation to this spot")
         }
     }
 }
