@@ -3,11 +3,12 @@
 //  WorkHaven
 //
 //  Created by Greg Miller on 9/19/25.
-//  Updated with comprehensive aggregate rating display system featuring 5-star ratings and detailed spot information
+//  Updated with distance-based sorting, city filtering, and comprehensive rating display system
 //
 
 import SwiftUI
 import CoreData
+import CoreLocation
 
 struct SpotListView: View {
     @StateObject private var viewModel: SpotViewModel
@@ -17,6 +18,12 @@ struct SpotListView: View {
     @State private var selectedNoiseFilter: NoiseRating?
     @State private var minWifiRating: Int16 = 1
     @State private var showOutletsOnly = false
+    @State private var selectedCity = "Boise"
+    @State private var showingLocationToast = false
+    @State private var sortByRatingOnly = false
+    
+    // Default location (Boise, ID) as fallback
+    private let defaultLocation = CLLocation(latitude: 43.6150, longitude: -116.2023)
     
     init(context: NSManagedObjectContext) {
         _viewModel = StateObject(wrappedValue: SpotViewModel(context: context))
@@ -24,6 +31,11 @@ struct SpotListView: View {
     
     var filteredSpots: [Spot] {
         var spots = viewModel.spots
+        
+        // Filter by city
+        spots = spots.filter { spot in
+            spot.address?.contains(selectedCity) == true
+        }
         
         // Apply search filter
         if !searchText.isEmpty {
@@ -47,7 +59,49 @@ struct SpotListView: View {
             spots = spots.filter { $0.outlets }
         }
         
-        return spots
+        // Sort by distance and rating
+        return sortSpots(spots)
+    }
+    
+    private func sortSpots(_ spots: [Spot]) -> [Spot] {
+        if sortByRatingOnly {
+            // Sort by overall rating only (descending)
+            return spots.sorted { spot1, spot2 in
+                viewModel.overallRating(for: spot1) > viewModel.overallRating(for: spot2)
+            }
+        } else {
+            // Sort by distance first, then by overall rating
+            return spots.sorted { spot1, spot2 in
+                let distance1 = getDistanceFromUser(for: spot1)
+                let distance2 = getDistanceFromUser(for: spot2)
+                
+                // If both have distances, sort by distance
+                if let dist1 = distance1, let dist2 = distance2 {
+                    return dist1 < dist2
+                }
+                // If only one has distance, prioritize it
+                else if distance1 != nil {
+                    return true
+                } else if distance2 != nil {
+                    return false
+                }
+                // If neither has distance, sort by overall rating
+                else {
+                    return viewModel.overallRating(for: spot1) > viewModel.overallRating(for: spot2)
+                }
+            }
+        }
+    }
+    
+    private func getDistanceFromUser(for spot: Spot) -> CLLocationDistance? {
+        if let userLocation = locationService.currentLocation {
+            let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
+            return userLocation.distance(from: spotLocation)
+        } else {
+            // Use default location (Boise) as fallback
+            let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
+            return defaultLocation.distance(from: spotLocation)
+        }
     }
     
     var body: some View {
@@ -56,11 +110,18 @@ struct SpotListView: View {
                 if viewModel.isLoading {
                     ProgressView("Loading spots...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if filteredSpots.isEmpty {
+                    NoSpotsFoundView(selectedCity: selectedCity)
                 } else {
                     List {
                         ForEach(filteredSpots) { spot in
                             NavigationLink(destination: SpotDetailView(spot: spot, viewModel: viewModel)) {
-                                SpotRowView(spot: spot, viewModel: viewModel, locationService: locationService)
+                                SpotRowView(
+                                    spot: spot, 
+                                    viewModel: viewModel, 
+                                    locationService: locationService,
+                                    sortByRatingOnly: sortByRatingOnly
+                                )
                             }
                         }
                         .onDelete(perform: viewModel.deleteSpots)
@@ -76,18 +137,55 @@ struct SpotListView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { viewModel.fetchSpots() }) {
+                    Button(action: { 
+                        viewModel.fetchSpots()
+                        locationService.startLocationUpdates()
+                    }) {
                         Image(systemName: "arrow.clockwise")
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
-                        Button("All Noise Levels") {
-                            selectedNoiseFilter = nil
+                        // City Selection
+                        Section("City") {
+                            Button("Boise") { selectedCity = "Boise" }
+                            Button("Austin") { selectedCity = "Austin" }
+                            Button("Seattle") { selectedCity = "Seattle" }
                         }
-                        ForEach(NoiseRating.allCases) { rating in
-                            Button(rating.displayName) {
-                                selectedNoiseFilter = rating
+                        
+                        Divider()
+                        
+                        // Sort Options
+                        Section("Sort By") {
+                            Button(action: { sortByRatingOnly = false }) {
+                                HStack {
+                                    Text("Distance & Rating")
+                                    if !sortByRatingOnly {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                            Button(action: { sortByRatingOnly = true }) {
+                                HStack {
+                                    Text("Rating Only")
+                                    if sortByRatingOnly {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        // Noise Filter
+                        Section("Noise Level") {
+                            Button("All Levels") {
+                                selectedNoiseFilter = nil
+                            }
+                            ForEach(NoiseRating.allCases) { rating in
+                                Button(rating.displayName) {
+                                    selectedNoiseFilter = rating
+                                }
                             }
                         }
                     } label: {
@@ -105,14 +203,27 @@ struct SpotListView: View {
                     viewModel.fetchSpots()
                 }
             }
+            .onChange(of: locationService.isLocationEnabled) { isEnabled in
+                if !isEnabled && !sortByRatingOnly {
+                    showingLocationToast = true
+                }
+            }
+            .toast(isPresented: $showingLocationToast) {
+                ToastView(
+                    message: "Enable location for distance sorting",
+                    backgroundColor: ThemeManager.Colors.secondary // Latte beige #FFF8E7
+                )
+            }
         }
     }
 }
 
+// MARK: - Spot Row View
 struct SpotRowView: View {
     let spot: Spot
     let viewModel: SpotViewModel
     let locationService: LocationService
+    let sortByRatingOnly: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
@@ -124,8 +235,17 @@ struct SpotRowView: View {
                 
                 Spacer()
                 
-                // Overall rating stars
-                OverallRatingStarsView(rating: viewModel.overallRating(for: spot))
+                // Overall rating stars with distance
+                HStack(spacing: ThemeManager.Spacing.sm) {
+                    OverallRatingStarsView(rating: viewModel.overallRating(for: spot))
+                    
+                    if !sortByRatingOnly, let distance = locationService.getFormattedDistance(from: spot) {
+                        Text(distance)
+                            .font(ThemeManager.Typography.dynamicCaption())
+                            .foregroundColor(ThemeManager.Colors.textSecondary)
+                            .accessibilityLabel("Distance: \(distance)")
+                    }
+                }
             }
             
             // Address
@@ -144,13 +264,6 @@ struct SpotRowView: View {
                     .cornerRadius(ThemeManager.CornerRadius.sm)
                 
                 Spacer()
-                
-                // Distance
-                if let distance = locationService.getFormattedDistance(from: spot) {
-                    Text(distance)
-                        .font(ThemeManager.Typography.dynamicCaption())
-                        .foregroundColor(ThemeManager.Colors.textSecondary)
-                }
             }
             
             // Detailed information row
@@ -170,10 +283,16 @@ struct SpotRowView: View {
         let outlets = spot.outlets ? "Yes" : "No"
         let wifiStars = String(repeating: "★", count: Int(spot.wifiRating)) + String(repeating: "☆", count: 5 - Int(spot.wifiRating))
         
-        return "\(name) at \(address). \(ratingText). WiFi rating: \(wifiStars). Noise level: \(noise). Outlets available: \(outlets)"
+        var distanceText = ""
+        if !sortByRatingOnly, let distance = locationService.getFormattedDistance(from: spot) {
+            distanceText = ", \(distance) away"
+        }
+        
+        return "\(name) at \(address). \(ratingText). WiFi rating: \(wifiStars). Noise level: \(noise). Outlets available: \(outlets)\(distanceText)"
     }
 }
 
+// MARK: - Overall Rating Stars View
 struct OverallRatingStarsView: View {
     let rating: Double
     
@@ -208,6 +327,7 @@ struct OverallRatingStarsView: View {
     }
 }
 
+// MARK: - Spot Details Row View
 struct SpotDetailsRowView: View {
     let spot: Spot
     
@@ -273,6 +393,72 @@ struct SpotDetailsRowView: View {
     
     private var outletColor: Color {
         return spot.outlets ? ThemeManager.Colors.success : ThemeManager.Colors.textSecondary
+    }
+}
+
+// MARK: - No Spots Found View
+struct NoSpotsFoundView: View {
+    let selectedCity: String
+    
+    var body: some View {
+        VStack(spacing: ThemeManager.Spacing.lg) {
+            Image(systemName: "location.slash")
+                .font(.system(size: 64))
+                .foregroundColor(ThemeManager.Colors.textSecondary)
+            
+            Text("No Spots Found")
+                .font(ThemeManager.Typography.dynamicTitle2())
+                .foregroundColor(ThemeManager.Colors.textPrimary)
+            
+            Text("No work spots found in \(selectedCity). Try a different city or add a new spot.")
+                .font(ThemeManager.Typography.dynamicBody())
+                .foregroundColor(ThemeManager.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, ThemeManager.Spacing.lg)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ThemeManager.Colors.background)
+    }
+}
+
+// MARK: - Toast View
+struct ToastView: View {
+    let message: String
+    let backgroundColor: Color
+    
+    var body: some View {
+        Text(message)
+            .font(ThemeManager.Typography.dynamicCaption())
+            .foregroundColor(ThemeManager.Colors.textPrimary)
+            .padding(.horizontal, ThemeManager.Spacing.md)
+            .padding(.vertical, ThemeManager.Spacing.sm)
+            .background(backgroundColor)
+            .cornerRadius(ThemeManager.CornerRadius.md)
+            .shadow(radius: ThemeManager.Shadows.sm.radius)
+    }
+}
+
+// MARK: - Toast Modifier
+extension View {
+    func toast(isPresented: Binding<Bool>, @ViewBuilder content: @escaping () -> some View) -> some View {
+        ZStack {
+            self
+            
+            if isPresented.wrappedValue {
+                VStack {
+                    Spacer()
+                    content()
+                        .padding(.bottom, 100) // Above tab bar
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeInOut(duration: 0.3), value: isPresented.wrappedValue)
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        isPresented.wrappedValue = false
+                    }
+                }
+            }
+        }
     }
 }
 

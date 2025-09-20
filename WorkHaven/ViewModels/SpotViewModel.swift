@@ -9,6 +9,8 @@
 import Foundation
 import CoreData
 import SwiftUI
+import CoreLocation
+import MapKit
 
 @MainActor
 class SpotViewModel: ObservableObject {
@@ -168,6 +170,61 @@ class SpotViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Distance and Location
+    
+    /// Calculates distance from user location to a spot
+    func distanceFromUser(for spot: Spot, userLocation: CLLocation?) -> CLLocationDistance? {
+        guard let userLocation = userLocation else { return nil }
+        let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
+        return userLocation.distance(from: spotLocation)
+    }
+    
+    /// Gets formatted distance string for a spot
+    func formattedDistance(for spot: Spot, userLocation: CLLocation?) -> String? {
+        guard let distance = distanceFromUser(for: spot, userLocation: userLocation) else { return nil }
+        
+        let formatter = MKDistanceFormatter()
+        formatter.unitStyle = .abbreviated
+        return formatter.string(fromDistance: distance)
+    }
+    
+    /// Sorts spots by distance from user location, then by overall rating
+    func sortSpotsByDistanceAndRating(_ spots: [Spot], userLocation: CLLocation?) -> [Spot] {
+        return spots.sorted { spot1, spot2 in
+            let distance1 = distanceFromUser(for: spot1, userLocation: userLocation)
+            let distance2 = distanceFromUser(for: spot2, userLocation: userLocation)
+            
+            // If both have distances, sort by distance
+            if let dist1 = distance1, let dist2 = distance2 {
+                return dist1 < dist2
+            }
+            // If only one has distance, prioritize it
+            else if distance1 != nil {
+                return true
+            } else if distance2 != nil {
+                return false
+            }
+            // If neither has distance, sort by overall rating
+            else {
+                return overallRating(for: spot1) > overallRating(for: spot2)
+            }
+        }
+    }
+    
+    /// Sorts spots by overall rating only (descending)
+    func sortSpotsByRatingOnly(_ spots: [Spot]) -> [Spot] {
+        return spots.sorted { spot1, spot2 in
+            overallRating(for: spot1) > overallRating(for: spot2)
+        }
+    }
+    
+    /// Filters spots by city
+    func filterSpotsByCity(_ spots: [Spot], city: String) -> [Spot] {
+        return spots.filter { spot in
+            spot.address?.contains(city) == true
+        }
+    }
+
     // MARK: - Search and Filter
     func searchSpots(query: String) -> [Spot] {
         if query.isEmpty {
