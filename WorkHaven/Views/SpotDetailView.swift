@@ -28,7 +28,7 @@ struct SpotDetailView: View {
                 // Header
                 VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
                     Text(spot.name ?? "Unknown Spot")
-                        .font(ThemeManager.Typography.dynamicLargeTitle())
+                        .font(ThemeManager.Typography.dynamicTitle2())
                         .fontWeight(.bold)
                         .foregroundColor(ThemeManager.Colors.textPrimary)
                         .lineLimit(2)
@@ -60,7 +60,7 @@ struct SpotDetailView: View {
                             .fill(ThemeManager.Colors.background)
                             .overlay(
                                 Image(systemName: "photo")
-                                    .font(ThemeManager.Typography.dynamicLargeTitle())
+                                    .font(ThemeManager.Typography.dynamicTitle2())
                                     .foregroundColor(ThemeManager.Colors.textSecondary)
                             )
                     }
