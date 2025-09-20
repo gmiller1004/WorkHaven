@@ -577,6 +577,18 @@ struct OriginalTipsSection: View {
 struct MapSection: View {
     let spot: Spot
     let openInAppleMaps: () -> Void
+    @State private var region: MKCoordinateRegion
+    @State private var hasInitialized = false
+    
+    init(spot: Spot, openInAppleMaps: @escaping () -> Void) {
+        self.spot = spot
+        self.openInAppleMaps = openInAppleMaps
+        // Initialize with spot coordinates
+        self._region = State(initialValue: MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude),
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+        ))
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
@@ -585,14 +597,43 @@ struct MapSection: View {
                 .fontWeight(.semibold)
                 .foregroundColor(ThemeManager.Colors.textPrimary)
             
-            Map(coordinateRegion: .constant(MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude),
-                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-            )), annotationItems: [spot]) { spot in
-                MapPin(coordinate: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude))
+            Map(coordinateRegion: $region, annotationItems: [spot]) { spot in
+                MapAnnotation(coordinate: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude)) {
+                    VStack {
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.title)
+                            .foregroundColor(ThemeManager.Colors.accent)
+                        
+                        Text(spot.name ?? "Work Spot")
+                            .font(ThemeManager.Typography.dynamicCaption())
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, ThemeManager.Spacing.sm)
+                            .padding(.vertical, ThemeManager.Spacing.xs)
+                            .background(ThemeManager.Colors.surface)
+                            .cornerRadius(ThemeManager.CornerRadius.sm)
+                            .shadow(
+                                color: ThemeManager.Shadows.sm.color,
+                                radius: ThemeManager.Shadows.sm.radius,
+                                x: ThemeManager.Shadows.sm.x,
+                                y: ThemeManager.Shadows.sm.y
+                            )
+                    }
+                }
             }
             .frame(height: 200)
             .cornerRadius(ThemeManager.CornerRadius.lg)
+            .onAppear {
+                if !hasInitialized {
+                    // Set initial region to spot location
+                    region = MKCoordinateRegion(
+                        center: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude),
+                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                    )
+                    hasInitialized = true
+                }
+            }
+            .accessibilityLabel("Map showing spot location")
+            .accessibilityHint("Pinch to zoom, drag to pan around the area")
             
             // Navigate to Spot Button
             Button(action: openInAppleMaps) {

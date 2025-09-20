@@ -22,6 +22,8 @@ struct MapView: View {
     @State private var region: MKCoordinateRegion
     @State private var selectedSpot: Spot?
     @State private var showingLocationAlert = false
+    @State private var hasUserInteracted = false
+    @State private var hasInitialized = false
     
     // Boise, ID coordinates as default
     private let boiseCoordinates = CLLocationCoordinate2D(latitude: 43.6150, longitude: -116.2023)
@@ -51,11 +53,26 @@ struct MapView: View {
                 setupLocation()
             }
             .onChange(of: locationService.currentLocation) { location in
-                if let location = location {
+                // Only auto-center on user location if user hasn't interacted with the map yet
+                if let location = location, !hasUserInteracted {
                     print("📍 User location updated: \(location.coordinate)")
                     updateRegionToUserLocation(location)
                 }
             }
+            .gesture(
+                DragGesture()
+                    .onChanged { _ in
+                        // Track when user starts dragging the map
+                        hasUserInteracted = true
+                    }
+            )
+            .gesture(
+                MagnificationGesture()
+                    .onChanged { _ in
+                        // Track when user starts zooming the map
+                        hasUserInteracted = true
+                    }
+            )
             
             VStack {
                 HStack {
@@ -110,6 +127,8 @@ struct MapView: View {
     
     private func centerOnUserLocation() {
         if let location = locationService.currentLocation {
+            // Reset user interaction flag when explicitly centering
+            hasUserInteracted = false
             updateRegionToUserLocation(location)
         } else if locationService.authorizationStatus == .denied || 
                   locationService.authorizationStatus == .restricted {
