@@ -31,11 +31,15 @@ struct SpotDetailView: View {
                         .font(ThemeManager.Typography.dynamicLargeTitle())
                         .fontWeight(.bold)
                         .foregroundColor(ThemeManager.Colors.textPrimary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
                         .accessibilityLabel("Spot name: \(spot.name ?? "Unknown Spot")")
                     
                     Text(spot.address ?? "No address")
                         .font(ThemeManager.Typography.dynamicTitle3())
                         .foregroundColor(ThemeManager.Colors.textSecondary)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
                         .accessibilityLabel("Address: \(spot.address ?? "No address")")
                 }
                 
@@ -309,6 +313,8 @@ struct RatingBreakdownRow: View {
             Text(subtitle)
                 .font(ThemeManager.Typography.dynamicCaption())
                 .foregroundColor(ThemeManager.Colors.textSecondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
             
             if showStars {
                 // Progress bar
@@ -531,6 +537,8 @@ struct UserTipsSection: View {
                     .font(ThemeManager.Typography.dynamicBody())
                     .foregroundColor(ThemeManager.Colors.textPrimary)
                     .padding(.vertical, 4)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("Tap 'Add Tips' to share your experience")
                     .font(ThemeManager.Typography.dynamicBody())
@@ -562,6 +570,8 @@ struct OriginalTipsSection: View {
             Text(tips)
                 .font(ThemeManager.Typography.dynamicBody())
                 .foregroundColor(ThemeManager.Colors.textPrimary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(ThemeManager.Spacing.md)
         .background(ThemeManager.Colors.surface)
