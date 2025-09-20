@@ -36,7 +36,5 @@
 	</array>
 	<key>UIUserInterfaceStyle</key>
 	<string>Automatic</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>17.0</string>
 </dict>
 </plist>
