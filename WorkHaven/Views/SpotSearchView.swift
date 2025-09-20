@@ -78,7 +78,7 @@ struct SpotSearchView: View {
                 .padding(.vertical, ThemeManager.Spacing.sm)
                 
                 // Results List
-                SpotSearchResultsView(spots: filteredSpots)
+                SpotSearchResultsView(spots: filteredSpots, context: viewContext)
             }
             .background(ThemeManager.Colors.background)
             .navigationTitle("Search Spots")
@@ -247,11 +247,19 @@ struct FilterChip: View {
 // MARK: - Search Results View
 struct SpotSearchResultsView: View {
     let spots: [Spot]
+    @StateObject private var viewModel: SpotViewModel
+    
+    init(spots: [Spot], context: NSManagedObjectContext) {
+        self.spots = spots
+        self._viewModel = StateObject(wrappedValue: SpotViewModel(context: context))
+    }
     
     var body: some View {
         List {
             ForEach(spots, id: \.objectID) { spot in
-                SpotSearchResultRow(spot: spot)
+                NavigationLink(destination: SpotDetailView(spot: spot, viewModel: viewModel)) {
+                    SpotSearchResultRow(spot: spot)
+                }
             }
         }
         .listStyle(PlainListStyle())

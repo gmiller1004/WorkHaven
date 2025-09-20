@@ -75,6 +75,11 @@ struct SpotListView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { viewModel.fetchSpots() }) {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button("All Noise Levels") {
                             selectedNoiseFilter = nil
@@ -94,6 +99,10 @@ struct SpotListView: View {
             }
             .onAppear {
                 locationService.requestLocationPermission()
+                // Only fetch if we don't have spots yet
+                if viewModel.spots.isEmpty {
+                    viewModel.fetchSpots()
+                }
             }
         }
     }

@@ -230,12 +230,8 @@ struct SpotDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        HStack {
-                            ShareButton(spot: spot)
-                            
-                            Button("Edit") {
-                                showingEditView = true
-                            }
+                        Button("Edit") {
+                            showingEditView = true
                         }
                     }
                 }

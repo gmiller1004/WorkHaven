@@ -49,6 +49,58 @@ class CloudKitManager: ObservableObject {
     
     // MARK: - Public Methods
     
+    func clearCloudKitRecords() async {
+        print("🗑️ Clearing all CloudKit records...")
+        
+        do {
+            // Check CloudKit availability
+            let status = try await container.accountStatus()
+            guard status == .available else {
+                print("⚠️ CloudKit not available")
+                return
+            }
+            
+            // Query all records using a queryable field
+            let query = CKQuery(recordType: recordType, predicate: NSPredicate(format: "name != ''"))
+            let results = try await privateDatabase.records(matching: query)
+            
+            print("📊 Found \(results.matchResults.count) CloudKit records to delete")
+            
+            // Delete records in batches
+            let recordIDs = results.matchResults.compactMap { (_, result) -> CKRecord.ID? in
+                switch result {
+                case .success(let record):
+                    return record.recordID
+                case .failure(let error):
+                    print("⚠️ Error fetching record for deletion: \(error)")
+                    return nil
+                }
+            }
+            
+            if !recordIDs.isEmpty {
+                let batchSize = 10
+                for i in stride(from: 0, to: recordIDs.count, by: batchSize) {
+                    let batch = Array(recordIDs[i..<min(i + batchSize, recordIDs.count)])
+                    let deleteOperation = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: batch)
+                    
+                    try await privateDatabase.modifyRecords(saving: [], deleting: batch)
+                    
+                    print("✅ Deleted batch of \(batch.count) records")
+                    
+                    // Small delay between batches
+                    try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                }
+                
+                print("✅ Successfully cleared all CloudKit records")
+            } else {
+                print("ℹ️ No CloudKit records found to delete")
+            }
+            
+        } catch {
+            print("❌ Error clearing CloudKit records: \(error)")
+        }
+    }
+    
     func syncWithCloudKit() async {
         guard !isSyncing && isCloudKitEnabled else { 
             print("🔄 CloudKit sync skipped - already syncing or disabled")
@@ -197,7 +249,7 @@ class CloudKitManager: ObservableObject {
         do {
             // Query using a queryable field (name) to ensure the schema is working
             let query = CKQuery(recordType: recordType, predicate: NSPredicate(format: "name != ''"))
-            query.sortDescriptors = [NSSortDescriptor(key: "lastModified", ascending: false)]
+            // Don't use sort descriptors on potentially non-queryable fields
             
             let results = try await privateDatabase.records(matching: query)
             
@@ -242,15 +294,26 @@ class CloudKitManager: ObservableObject {
     
     private func processRemoteRecord(_ record: CKRecord) async {
         do {
-            // Check if we already have this spot locally
-            let existingSpot = try findSpotByCloudKitID(record.recordID.recordName)
-            
-            if let existingSpot = existingSpot {
+            // First check by CloudKit ID
+            if let existingSpot = try findSpotByCloudKitID(record.recordID.recordName) {
                 // Update existing spot
                 try updateSpotFromCloudKitRecord(existingSpot, record: record)
+                print("📝 Updated existing spot from CloudKit: \(record[FieldNames.name] ?? "Unknown")")
             } else {
-                // Create new spot
-                try createSpotFromCloudKitRecord(record)
+                // Check if we already have a spot with the same name and address
+                let name = record[FieldNames.name] as? String ?? ""
+                let address = record[FieldNames.address] as? String ?? ""
+                
+                if let existingSpot = try findSpotByNameAndAddress(name: name, address: address) {
+                    // Link the existing spot to this CloudKit record
+                    existingSpot.setValue(record.recordID.recordName, forKey: "cloudKitRecordID")
+                    try updateSpotFromCloudKitRecord(existingSpot, record: record)
+                    print("🔗 Linked existing spot to CloudKit record: \(name)")
+                } else {
+                    // Create new spot only if it doesn't exist
+                    try createSpotFromCloudKitRecord(record)
+                    print("➕ Created new spot from CloudKit: \(name)")
+                }
             }
             
             // Save context
@@ -293,10 +356,20 @@ class CloudKitManager: ObservableObject {
     // MARK: - CloudKit to Core Data Mapping
     
     private func createSpotFromCloudKitRecord(_ record: CKRecord) throws {
+        // Validate required fields before creating the spot
+        let name = record[FieldNames.name] as? String ?? ""
+        let address = record[FieldNames.address] as? String ?? ""
+        
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            print("⚠️ Skipping CloudKit record with missing required fields: name='\(name)', address='\(address)'")
+            return
+        }
+        
         let spot = Spot(context: context)
         
-        spot.name = record[FieldNames.name] as? String
-        spot.address = record[FieldNames.address] as? String
+        spot.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        spot.address = address.trimmingCharacters(in: .whitespacesAndNewlines)
         spot.latitude = record[FieldNames.latitude] as? Double ?? 0.0
         spot.longitude = record[FieldNames.longitude] as? Double ?? 0.0
         spot.wifiRating = record[FieldNames.wifiRating] as? Int16 ?? 1
@@ -315,16 +388,29 @@ class CloudKitManager: ObservableObject {
         let localLastModified = spot.value(forKey: "lastModified") as? Date ?? Date.distantPast
         
         if remoteLastModified > localLastModified {
-            // Update with remote data
-            spot.name = record[FieldNames.name] as? String
-            spot.address = record[FieldNames.address] as? String
-            spot.latitude = record[FieldNames.latitude] as? Double ?? 0.0
-            spot.longitude = record[FieldNames.longitude] as? Double ?? 0.0
-            spot.wifiRating = record[FieldNames.wifiRating] as? Int16 ?? 1
-            spot.noiseRating = record[FieldNames.noiseRating] as? String ?? "Low"
-            spot.outlets = record[FieldNames.outlets] as? Bool ?? false
-            spot.tips = record[FieldNames.tips] as? String
-            spot.photoURL = record[FieldNames.photoURL] as? String
+            // Validate required fields before updating
+            let name = record[FieldNames.name] as? String ?? ""
+            let address = record[FieldNames.address] as? String ?? ""
+            
+            // Only update if we have valid required fields
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            if !trimmedName.isEmpty {
+                spot.name = trimmedName
+            }
+            if !trimmedAddress.isEmpty {
+                spot.address = trimmedAddress
+            }
+            
+            // Update optional fields
+            spot.latitude = record[FieldNames.latitude] as? Double ?? spot.latitude
+            spot.longitude = record[FieldNames.longitude] as? Double ?? spot.longitude
+            spot.wifiRating = record[FieldNames.wifiRating] as? Int16 ?? spot.wifiRating
+            spot.noiseRating = record[FieldNames.noiseRating] as? String ?? spot.noiseRating
+            spot.outlets = record[FieldNames.outlets] as? Bool ?? spot.outlets
+            spot.tips = record[FieldNames.tips] as? String ?? spot.tips
+            spot.photoURL = record[FieldNames.photoURL] as? String ?? spot.photoURL
             spot.setValue(remoteLastModified, forKey: "lastModified")
         }
     }
@@ -334,6 +420,15 @@ class CloudKitManager: ObservableObject {
     private func findSpotByCloudKitID(_ cloudKitID: String) throws -> Spot? {
         let request: NSFetchRequest<Spot> = Spot.fetchRequest()
         request.predicate = NSPredicate(format: "cloudKitRecordID == %@", cloudKitID)
+        request.fetchLimit = 1
+        
+        let results = try context.fetch(request)
+        return results.first
+    }
+    
+    private func findSpotByNameAndAddress(name: String, address: String) throws -> Spot? {
+        let request: NSFetchRequest<Spot> = Spot.fetchRequest()
+        request.predicate = NSPredicate(format: "name == %@ AND address == %@", name, address)
         request.fetchLimit = 1
         
         let results = try context.fetch(request)
@@ -399,4 +494,5 @@ extension CloudKitManager {
         return true
     }
 }
+
 

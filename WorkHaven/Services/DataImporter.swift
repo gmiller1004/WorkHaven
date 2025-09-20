@@ -25,6 +25,74 @@ class DataImporter: ObservableObject {
         self.notificationManager = manager
     }
     
+    // MARK: - Manual Data Management
+    
+    func clearAllData() async {
+        print("🗑️ Clearing all data...")
+        
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = Spot.fetchRequest()
+        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+        
+        do {
+            try managedObjectContext.execute(deleteRequest)
+            try managedObjectContext.save()
+            print("✅ All data cleared successfully")
+        } catch {
+            print("❌ Error clearing data: \(error)")
+        }
+    }
+    
+    // MARK: - Duplicate Cleanup
+    
+    func cleanupDuplicates() async {
+        print("🧹 Starting duplicate cleanup...")
+        
+        let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
+        fetchRequest.sortDescriptors = [NSSortDescriptor(key: "name", ascending: true)]
+        
+        do {
+            let allSpots = try managedObjectContext.fetch(fetchRequest)
+            print("📊 Total spots in database: \(allSpots.count)")
+            
+            var duplicatesRemoved = 0
+            
+            // Group spots by name and city
+            var spotGroups: [String: [Spot]] = [:]
+            for spot in allSpots {
+                let key = "\(spot.name ?? "")|\(spot.address ?? "")"
+                if spotGroups[key] == nil {
+                    spotGroups[key] = []
+                }
+                spotGroups[key]?.append(spot)
+            }
+            
+            print("📊 Unique spot groups: \(spotGroups.count)")
+            
+            // Remove duplicates, keeping the first one
+            for (key, spots) in spotGroups {
+                if spots.count > 1 {
+                    print("🔍 Found \(spots.count) duplicates for '\(spots.first?.name ?? "")' in '\(spots.first?.address ?? "")'")
+                    
+                    // Keep the first spot, delete the rest
+                    for i in 1..<spots.count {
+                        managedObjectContext.delete(spots[i])
+                        duplicatesRemoved += 1
+                    }
+                }
+            }
+            
+            if duplicatesRemoved > 0 {
+                try managedObjectContext.save()
+                print("✅ Cleaned up \(duplicatesRemoved) duplicate spots")
+            } else {
+                print("✅ No duplicates found")
+            }
+            
+        } catch {
+            print("❌ Error cleaning up duplicates: \(error)")
+        }
+    }
+    
     // MARK: - CSV Import Functions
     
     func importWorkSpaces(for city: String) async {
@@ -37,11 +105,43 @@ class DataImporter: ObservableObject {
     }
     
     private func importWorkSpaces(from fileName: String) async {
+        // Prevent multiple simultaneous imports
+        guard !isImporting else {
+            print("⚠️ Import already in progress, skipping duplicate import request for \(fileName)")
+            return
+        }
+        
+        print("🔒 Starting import guard for \(fileName) - isImporting: \(isImporting)")
+        
         await MainActor.run {
             isImporting = true
             importProgress = 0.0
             importStatus = "Starting import..."
         }
+        
+        print("🔄 Starting import from file: \(fileName)")
+        
+        // Check if we already have spots from this specific city
+        let cityName = fileName.replacingOccurrences(of: "_Work_Spots", with: "")
+        let existingSpotsRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
+        existingSpotsRequest.predicate = NSPredicate(format: "address CONTAINS[cd] %@", cityName)
+        existingSpotsRequest.fetchLimit = 1
+        do {
+            let existingSpots = try managedObjectContext.fetch(existingSpotsRequest)
+            if !existingSpots.isEmpty {
+                print("📊 Found existing spots for \(cityName), skipping import to prevent duplicates")
+                await MainActor.run {
+                    importStatus = "Skipped import - \(cityName) spots already exist"
+                    isImporting = false
+                }
+                return
+            }
+        } catch {
+            print("Error checking for existing spots: \(error)")
+        }
+        
+        // First, clean up any existing duplicates
+        await cleanupDuplicates()
         
         do {
             // Try to load from CSV file first
@@ -197,14 +297,14 @@ class DataImporter: ObservableObject {
         var errorCount = 0
         
         for (index, csvSpot) in csvSpots.enumerated() {
-            // Enhanced deduplication: check by name AND address
+            // Enhanced deduplication: check by name AND city (since we use city as address)
             let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
             fetchRequest.predicate = NSPredicate(format: "name == %@ AND address == %@", csvSpot.name, csvSpot.city)
             
             do {
                 let existingSpots = try managedObjectContext.fetch(fetchRequest)
                 if !existingSpots.isEmpty {
-                    print("⚠️  WARNING: Spot '\(csvSpot.name)' in '\(csvSpot.city)' already exists, skipping...")
+                    print("⚠️  WARNING: Spot '\(csvSpot.name)' in '\(csvSpot.city)' already exists (found \(existingSpots.count) duplicates), skipping...")
                     skippedCount += 1
                     continue
                 }
@@ -428,17 +528,28 @@ class DataImporter: ObservableObject {
             importStatus = "Clearing all spots..."
         }
         
-        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = Spot.fetchRequest()
-        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
-        
         do {
-            try managedObjectContext.execute(deleteRequest)
+            // Fetch all spots
+            let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
+            let allSpots = try managedObjectContext.fetch(fetchRequest)
+            
+            print("🗑️ Found \(allSpots.count) spots to delete")
+            
+            // Delete each spot individually
+            for spot in allSpots {
+                managedObjectContext.delete(spot)
+            }
+            
+            // Save the changes
             try managedObjectContext.save()
             
+            print("✅ Successfully deleted \(allSpots.count) spots")
+            
             await MainActor.run {
-                importStatus = "All spots cleared successfully"
+                importStatus = "All spots cleared successfully (\(allSpots.count) deleted)"
             }
         } catch {
+            print("❌ Error clearing spots: \(error)")
             await MainActor.run {
                 importStatus = "Error clearing spots: \(error.localizedDescription)"
             }

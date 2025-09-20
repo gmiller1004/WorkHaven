@@ -11,12 +11,15 @@ import CoreData
 struct ImportView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var dataImporter: DataImporter
+    @StateObject private var cloudKitManager: CloudKitManager
     @State private var showingClearAlert = false
     @State private var selectedCity = "Boise"
     @State private var availableCities: [String] = []
     
     init() {
-        self._dataImporter = StateObject(wrappedValue: DataImporter(context: PersistenceController.shared.container.viewContext))
+        let context = PersistenceController.shared.container.viewContext
+        self._dataImporter = StateObject(wrappedValue: DataImporter(context: context))
+        self._cloudKitManager = StateObject(wrappedValue: CloudKitManager(context: context))
     }
     
     var body: some View {
@@ -180,6 +183,7 @@ struct ImportView: View {
                 Button("Clear All", role: .destructive) {
                     Task {
                         await dataImporter.clearAllSpots()
+                        await cloudKitManager.clearCloudKitRecords()
                     }
                 }
             } message: {

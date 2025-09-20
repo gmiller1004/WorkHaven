@@ -14,6 +14,10 @@ struct WorkHavenApp: App {
     @StateObject private var dataImporter: DataImporter
     @StateObject private var cloudKitManager: CloudKitManager
     @StateObject private var notificationManager: NotificationManager
+    @State private var hasCheckedForData = false
+    
+    // Static flag to prevent multiple imports across app launches
+    private static var hasImportedData = false
 
     init() {
         let context = PersistenceController.shared.container.viewContext
@@ -27,9 +31,18 @@ struct WorkHavenApp: App {
             ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
         .onAppear {
-            checkAndImportData()
-            Task {
-                await cloudKitManager.syncWithCloudKit()
+            if !hasCheckedForData && !Self.hasImportedData {
+                hasCheckedForData = true
+                Self.hasImportedData = true
+                print("🚀 App launched - checking for data...")
+                checkAndImportData()
+                Task {
+                    // Add a small delay to ensure import completes before CloudKit sync
+                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                    await cloudKitManager.syncWithCloudKit()
+                }
+            } else {
+                print("⚠️ App onAppear called again - skipping data check (hasCheckedForData: \(hasCheckedForData), hasImportedData: \(Self.hasImportedData))")
             }
         }
         }
@@ -48,9 +61,12 @@ struct WorkHavenApp: App {
             
             // If no spots exist, import the Boise work spaces
             if existingSpots.isEmpty {
+                print("📊 No spots found in database, importing Boise work spaces...")
                 Task {
                     await dataImporter.importBoiseWorkSpaces()
                 }
+            } else {
+                print("📊 Found existing spots, skipping import")
             }
         } catch {
             print("Error checking for existing spots: \(error)")

@@ -3,6 +3,7 @@
 //  WorkHaven
 //
 //  Created by Greg Miller on 9/19/25.
+//  Updated with coffee shop-inspired theme featuring warm, cozy colors and Avenir Next typography
 //
 
 import SwiftUI
@@ -13,75 +14,75 @@ class ThemeManager: ObservableObject {
     
     // MARK: - Colors
     struct Colors {
-        static let primary = Color(hex: "#1E90FF") // Dodger Blue
-        static let secondary = Color(hex: "#FFFFFF") // White
-        static let background = Color(hex: "#F8F9FA") // Light Gray
+        static let primary = Color(hex: "#8B5E3C") // Mocha Brown
+        static let secondary = Color(hex: "#FFF8E7") // Latte Beige
+        static let background = Color(hex: "#F5E9D8") // Light Cream
         static let surface = Color(hex: "#FFFFFF") // White
-        static let textPrimary = Color(hex: "#212529") // Dark Gray
-        static let textSecondary = Color(hex: "#6C757D") // Medium Gray
-        static let accent = Color(hex: "#1E90FF") // Dodger Blue
-        static let success = Color(hex: "#28A745") // Green
-        static let warning = Color(hex: "#FFC107") // Yellow
-        static let error = Color(hex: "#DC3545") // Red
-        static let border = Color(hex: "#DEE2E6") // Light Border
-        static let shadow = Color(hex: "#000000").opacity(0.1) // Subtle Shadow
+        static let textPrimary = Color(hex: "#3C2F2F") // Dark Coffee
+        static let textSecondary = Color(hex: "#6B4E31") // Medium Brown
+        static let accent = Color(hex: "#F28C38") // Soft Coral
+        static let success = Color(hex: "#4A7043") // Sage Green
+        static let warning = Color(hex: "#FFB347") // Warm Yellow
+        static let error = Color(hex: "#D94F70") // Soft Red
+        static let border = Color(hex: "#E6D8C2") // Light Beige
+        static let shadow = Color(hex: "#3C2F2F").opacity(0.1) // Dark Coffee Shadow
     }
     
     // MARK: - Typography
     struct Typography {
         // Headers
-        static let largeTitle = Font.custom("SF Pro Display", size: 34).weight(.bold)
-        static let title1 = Font.custom("SF Pro Display", size: 28).weight(.bold)
-        static let title2 = Font.custom("SF Pro Display", size: 22).weight(.bold)
-        static let title3 = Font.custom("SF Pro Display", size: 20).weight(.semibold)
+        static let largeTitle = Font.custom("Avenir Next", size: 34).weight(.bold)
+        static let title1 = Font.custom("Avenir Next", size: 28).weight(.bold)
+        static let title2 = Font.custom("Avenir Next", size: 22).weight(.bold)
+        static let title3 = Font.custom("Avenir Next", size: 20).weight(.semibold)
         
         // Body Text
-        static let headline = Font.custom("SF Pro Text", size: 17).weight(.semibold)
-        static let body = Font.custom("SF Pro Text", size: 17).weight(.regular)
-        static let callout = Font.custom("SF Pro Text", size: 16).weight(.regular)
-        static let subheadline = Font.custom("SF Pro Text", size: 15).weight(.regular)
-        static let footnote = Font.custom("SF Pro Text", size: 13).weight(.regular)
-        static let caption = Font.custom("SF Pro Text", size: 12).weight(.regular)
+        static let headline = Font.custom("Avenir Next", size: 17).weight(.semibold)
+        static let body = Font.custom("Avenir Next", size: 17).weight(.regular)
+        static let callout = Font.custom("Avenir Next", size: 16).weight(.regular)
+        static let subheadline = Font.custom("Avenir Next", size: 15).weight(.regular)
+        static let footnote = Font.custom("Avenir Next", size: 13).weight(.regular)
+        static let caption = Font.custom("Avenir Next", size: 12).weight(.regular)
         
         // Dynamic Type Support
         static func dynamicLargeTitle() -> Font {
-            return Font.custom("SF Pro Display", size: UIFont.preferredFont(forTextStyle: .largeTitle).pointSize).weight(.bold)
+            return Font.custom("Avenir Next", size: UIFont.preferredFont(forTextStyle: .largeTitle).pointSize).weight(.bold)
         }
         
         static func dynamicTitle1() -> Font {
-            return Font.custom("SF Pro Display", size: UIFont.preferredFont(forTextStyle: .title1).pointSize).weight(.bold)
+            return Font.custom("Avenir Next", size: UIFont.preferredFont(forTextStyle: .title1).pointSize).weight(.bold)
         }
         
         static func dynamicTitle2() -> Font {
-            return Font.custom("SF Pro Display", size: UIFont.preferredFont(forTextStyle: .title2).pointSize).weight(.bold)
+            return Font.custom("Avenir Next", size: UIFont.preferredFont(forTextStyle: .title2).pointSize).weight(.bold)
         }
         
         static func dynamicTitle3() -> Font {
-            return Font.custom("SF Pro Display", size: UIFont.preferredFont(forTextStyle: .title3).pointSize).weight(.semibold)
+            return Font.custom("Avenir Next", size: UIFont.preferredFont(forTextStyle: .title3).pointSize).weight(.semibold)
         }
         
         static func dynamicHeadline() -> Font {
-            return Font.custom("SF Pro Text", size: UIFont.preferredFont(forTextStyle: .headline).pointSize).weight(.semibold)
+            return Font.custom("Avenir Next", size: UIFont.preferredFont(forTextStyle: .headline).pointSize).weight(.semibold)
         }
         
         static func dynamicBody() -> Font {
-            return Font.custom("SF Pro Text", size: UIFont.preferredFont(forTextStyle: .body).pointSize).weight(.regular)
+            return Font.custom("Avenir Next", size: UIFont.preferredFont(forTextStyle: .body).pointSize).weight(.regular)
         }
         
         static func dynamicCallout() -> Font {
-            return Font.custom("SF Pro Text", size: UIFont.preferredFont(forTextStyle: .callout).pointSize).weight(.regular)
+            return Font.custom("Avenir Next", size: UIFont.preferredFont(forTextStyle: .callout).pointSize).weight(.regular)
         }
         
         static func dynamicSubheadline() -> Font {
-            return Font.custom("SF Pro Text", size: UIFont.preferredFont(forTextStyle: .subheadline).pointSize).weight(.regular)
+            return Font.custom("Avenir Next", size: UIFont.preferredFont(forTextStyle: .subheadline).pointSize).weight(.regular)
         }
         
         static func dynamicFootnote() -> Font {
-            return Font.custom("SF Pro Text", size: UIFont.preferredFont(forTextStyle: .footnote).pointSize).weight(.regular)
+            return Font.custom("Avenir Next", size: UIFont.preferredFont(forTextStyle: .footnote).pointSize).weight(.regular)
         }
         
         static func dynamicCaption() -> Font {
-            return Font.custom("SF Pro Text", size: UIFont.preferredFont(forTextStyle: .caption1).pointSize).weight(.regular)
+            return Font.custom("Avenir Next", size: UIFont.preferredFont(forTextStyle: .caption1).pointSize).weight(.regular)
         }
     }
     
@@ -97,18 +98,18 @@ class ThemeManager: ObservableObject {
     
     // MARK: - Corner Radius
     struct CornerRadius {
-        static let sm: CGFloat = 4
-        static let md: CGFloat = 8
-        static let lg: CGFloat = 12
-        static let xl: CGFloat = 16
-        static let round: CGFloat = 50
+        static let sm: CGFloat = 6
+        static let md: CGFloat = 10
+        static let lg: CGFloat = 16
+        static let xl: CGFloat = 20
+        static let round: CGFloat = 60
     }
     
     // MARK: - Shadows
     struct Shadows {
-        static let sm = Shadow(color: Colors.shadow, radius: 2, x: 0, y: 1)
-        static let md = Shadow(color: Colors.shadow, radius: 4, x: 0, y: 2)
-        static let lg = Shadow(color: Colors.shadow, radius: 8, x: 0, y: 4)
+        static let sm = Shadow(color: Colors.shadow, radius: 3, x: 0, y: 1)
+        static let md = Shadow(color: Colors.shadow, radius: 5, x: 0, y: 2)
+        static let lg = Shadow(color: Colors.shadow, radius: 7, x: 0, y: 4)
     }
     
     struct Shadow {
