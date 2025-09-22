@@ -25,16 +25,13 @@ struct MapView: View {
     @State private var hasUserInteracted = false
     @State private var hasInitialized = false
     
-    // Boise, ID coordinates as default
-    private let boiseCoordinates = CLLocationCoordinate2D(latitude: 43.6150, longitude: -116.2023)
-    
     init() {
-        // Initialize with Boise, ID as default center
-        let boiseCenter = CLLocationCoordinate2D(latitude: 43.6150, longitude: -116.2023)
-        print("🗺️ MapView initializing with Boise coordinates: \(boiseCenter)")
+        // Initialize with a default region that will be updated when user location is available
+        let defaultCenter = CLLocationCoordinate2D(latitude: 0.0, longitude: 0.0)
+        print("🗺️ MapView initializing - waiting for user location")
         self._region = State(initialValue: MKCoordinateRegion(
-            center: boiseCenter,
-            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+            center: defaultCenter,
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
         ))
     }
     

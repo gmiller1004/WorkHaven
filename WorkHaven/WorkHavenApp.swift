@@ -57,24 +57,7 @@ struct WorkHavenApp: App {
             await dataImporter.configure()
         }
         
-        // Check if we already have spots in the database
-        let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
-        fetchRequest.fetchLimit = 1
-        
-        do {
-            let existingSpots = try persistenceController.container.viewContext.fetch(fetchRequest)
-            
-            // If no spots exist, import the Boise work spaces
-            if existingSpots.isEmpty {
-                print("📊 No spots found in database, importing Boise work spaces...")
-                Task {
-                    await dataImporter.importBoiseWorkSpaces()
-                }
-            } else {
-                print("📊 Found existing spots, skipping import")
-            }
-        } catch {
-            print("Error checking for existing spots: \(error)")
-        }
+        // Skip automatic data import - let SpotViewModel handle location-based discovery
+        print("📊 Skipping automatic data import - using location-based discovery only")
     }
 }

@@ -95,6 +95,7 @@ secrets.xcconfig
 secrets.plist
 Config.plist
 APIKeys.plist
+Info.plist
 
 # Environment variables
 .env

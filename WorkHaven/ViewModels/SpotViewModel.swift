@@ -70,7 +70,14 @@ class SpotViewModel: ObservableObject {
         
         do {
             // Get user location
-            let userLocation = await getCurrentUserLocation()
+            guard let userLocation = await getCurrentUserLocation() else {
+                await MainActor.run {
+                    isSeeding = false
+                    seedingStatus = "Location required"
+                    errorMessage = "Location access is required to find nearby work spots. Please enable location services in Settings."
+                }
+                return
+            }
             
             // Check for existing spots within radius
             let existingSpots = await checkSpotsWithinRadius(userLocation: userLocation)
@@ -113,20 +120,20 @@ class SpotViewModel: ObservableObject {
         }
     }
     
-    private func getCurrentUserLocation() async -> CLLocation {
+    private func getCurrentUserLocation() async -> CLLocation? {
         // Request location permission
         locationService.requestLocationPermission()
         
         // Wait for location with timeout
-        let timeout: TimeInterval = 10.0
+        let timeout: TimeInterval = 15.0
         let startTime = Date()
         
         while locationService.currentLocation == nil && Date().timeIntervalSince(startTime) < timeout {
             try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
         }
         
-        // Return user location or fallback to Boise, ID
-        return locationService.currentLocation ?? CLLocation(latitude: 43.6150, longitude: -116.2023)
+        // Return user location or nil if not available
+        return locationService.currentLocation
     }
     
     private func checkSpotsWithinRadius(userLocation: CLLocation) async -> [Spot] {

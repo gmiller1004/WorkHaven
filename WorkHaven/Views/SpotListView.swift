@@ -18,13 +18,8 @@ struct SpotListView: View {
     @State private var selectedNoiseFilter: NoiseRating?
     @State private var minWifiRating: Int16 = 1
     @State private var showOutletsOnly = false
-    @State private var selectedCity = "Boise"
     @State private var showingLocationToast = false
     @State private var sortByRatingOnly = false
-    @State private var showAllCities = false
-    
-    // Default location (Boise, ID) as fallback
-    private let defaultLocation = CLLocation(latitude: 43.6150, longitude: -116.2023)
     
     init(context: NSManagedObjectContext) {
         _viewModel = StateObject(wrappedValue: SpotViewModel(context: context))
@@ -32,13 +27,6 @@ struct SpotListView: View {
     
     var filteredSpots: [Spot] {
         var spots = viewModel.spots
-        
-        // Filter by city (unless showing all cities)
-        if !showAllCities {
-            spots = spots.filter { spot in
-                spot.address?.contains(selectedCity) == true
-            }
-        }
         
         // Apply search filter
         if !searchText.isEmpty {
@@ -97,14 +85,11 @@ struct SpotListView: View {
     }
     
     private func getDistanceFromUser(for spot: Spot) -> CLLocationDistance? {
-        if let userLocation = locationService.currentLocation {
-            let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
-            return userLocation.distance(from: spotLocation)
-        } else {
-            // Use default location (Boise) as fallback
-            let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
-            return defaultLocation.distance(from: spotLocation)
+        guard let userLocation = locationService.currentLocation else {
+            return nil
         }
+        let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
+        return userLocation.distance(from: spotLocation)
     }
     
     var body: some View {
@@ -114,7 +99,7 @@ struct SpotListView: View {
                     ProgressView("Loading spots...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredSpots.isEmpty {
-                    NoSpotsFoundView(selectedCity: showAllCities ? "All Cities" : selectedCity)
+                    NoSpotsFoundView(selectedCity: "your area")
                 } else {
                     List {
                         ForEach(filteredSpots) { spot in
@@ -149,59 +134,6 @@ struct SpotListView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
-                        // Show All Option
-                        Section("View") {
-                            Button(action: { 
-                                showAllCities = true
-                                selectedCity = "All Cities"
-                            }) {
-                                HStack {
-                                    Text("Show All Cities")
-                                    if showAllCities {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // City Selection
-                        Section("City") {
-                            Button(action: { 
-                                showAllCities = false
-                                selectedCity = "Boise"
-                            }) {
-                                HStack {
-                                    Text("Boise")
-                                    if !showAllCities && selectedCity == "Boise" {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                            Button(action: { 
-                                showAllCities = false
-                                selectedCity = "Austin"
-                            }) {
-                                HStack {
-                                    Text("Austin")
-                                    if !showAllCities && selectedCity == "Austin" {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                            Button(action: { 
-                                showAllCities = false
-                                selectedCity = "Seattle"
-                            }) {
-                                HStack {
-                                    Text("Seattle")
-                                    if !showAllCities && selectedCity == "Seattle" {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Divider()
                         
                         // Sort Options
                         Section("Sort By") {

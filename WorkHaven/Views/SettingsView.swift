@@ -361,6 +361,25 @@ struct SettingsView: View {
                     .accessibilityHint("Double tap to test CloudKit connectivity")
                     
                     Button(action: {
+                        Task {
+                            await wipeDatabase()
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "trash.circle.fill")
+                                .foregroundColor(ThemeManager.Colors.error)
+                            Text("Wipe Database (Debug)")
+                                .font(ThemeManager.Typography.dynamicBody())
+                                .foregroundColor(ThemeManager.Colors.textPrimary)
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                                .foregroundColor(ThemeManager.Colors.textSecondary)
+                        }
+                    }
+                    .accessibilityLabel("Wipe Database Debug")
+                    .accessibilityHint("Double tap to completely wipe all data (debug only)")
+                    
+                    Button(action: {
                         showingDatabaseReset = true
                     }) {
                         HStack {
@@ -589,6 +608,49 @@ struct SettingsView: View {
             await MainActor.run {
                 seedingStatus = "CloudKit connection failed"
                 seedingAlertMessage = "CloudKit connection failed: \(error.localizedDescription)"
+                showingSeedingAlert = true
+                isSeeding = false
+            }
+        }
+    }
+    
+    private func wipeDatabase() async {
+        await MainActor.run {
+            seedingStatus = "Wiping database..."
+            isSeeding = true
+        }
+        
+        do {
+            // Wipe local Core Data
+            let context = PersistenceController.shared.container.viewContext
+            
+            // Delete all Spot entities
+            let spotFetchRequest: NSFetchRequest<NSFetchRequestResult> = Spot.fetchRequest()
+            let spotDeleteRequest = NSBatchDeleteRequest(fetchRequest: spotFetchRequest)
+            
+            // Delete all UserRating entities
+            let ratingFetchRequest: NSFetchRequest<NSFetchRequestResult> = UserRating.fetchRequest()
+            let ratingDeleteRequest = NSBatchDeleteRequest(fetchRequest: ratingFetchRequest)
+            
+            try context.execute(spotDeleteRequest)
+            try context.execute(ratingDeleteRequest)
+            try context.save()
+            
+            // Wipe CloudKit data
+            let cloudKitManager = CloudKitManager(context: context)
+            await cloudKitManager.clearCloudKitRecords()
+            
+            await MainActor.run {
+                seedingStatus = "Database wiped successfully!"
+                seedingAlertMessage = "All data has been wiped. The app will now start fresh with location-based discovery."
+                showingSeedingAlert = true
+                isSeeding = false
+            }
+            
+        } catch {
+            await MainActor.run {
+                seedingStatus = "Database wipe failed"
+                seedingAlertMessage = "Failed to wipe database: \(error.localizedDescription)"
                 showingSeedingAlert = true
                 isSeeding = false
             }

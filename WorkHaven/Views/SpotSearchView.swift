@@ -21,13 +21,8 @@ struct SpotSearchView: View {
     @State private var selectedOverallRating: Double = 1.0
     @State private var showingFilters = false
     @State private var filteredSpots: [Spot] = []
-    @State private var selectedCity = "Boise"
     @State private var sortByRatingOnly = false
     @State private var showingLocationToast = false
-    @State private var showAllCities = false
-    
-    // Default location (Boise, ID) as fallback
-    private let defaultLocation = CLLocation(latitude: 43.6150, longitude: -116.2023)
     
     init() {
         let context = PersistenceController.shared.container.viewContext
@@ -40,11 +35,7 @@ struct SpotSearchView: View {
         
         var predicates: [NSPredicate] = []
         
-        // City filter (unless showing all cities)
-        if !showAllCities {
-            let cityPredicate = NSPredicate(format: "address CONTAINS[cd] %@", selectedCity)
-            predicates.append(cityPredicate)
-        }
+        // No city filtering - show all spots
         
         // Search text filter
         if !searchText.isEmpty {
@@ -97,16 +88,14 @@ struct SpotSearchView: View {
                     outletsOnly: $outletsOnly,
                     selectedOverallRating: $selectedOverallRating,
                     showingFilters: $showingFilters,
-                    selectedCity: $selectedCity,
-                    sortByRatingOnly: $sortByRatingOnly,
-                    showAllCities: $showAllCities
+                    sortByRatingOnly: $sortByRatingOnly
                 )
                 .padding(.horizontal, ThemeManager.Spacing.md)
                 .padding(.vertical, ThemeManager.Spacing.sm)
                 
                 // Results List
                 if filteredSpots.isEmpty {
-                    NoSpotsFoundView(selectedCity: showAllCities ? "All Cities" : selectedCity)
+                    NoSpotsFoundView(selectedCity: "your area")
                 } else {
                     SpotSearchResultsView(
                         spots: filteredSpots, 
@@ -138,9 +127,6 @@ struct SpotSearchView: View {
             .onChange(of: selectedOverallRating) { _ in
                 updateFilteredSpots()
             }
-            .onChange(of: selectedCity) { _ in
-                updateFilteredSpots()
-            }
             .onChange(of: sortByRatingOnly) { _ in
                 updateFilteredSpots()
             }
@@ -155,9 +141,7 @@ struct SpotSearchView: View {
                     selectedNoiseRating: $selectedNoiseRating,
                     outletsOnly: $outletsOnly,
                     selectedOverallRating: $selectedOverallRating,
-                    selectedCity: $selectedCity,
-                    sortByRatingOnly: $sortByRatingOnly,
-                    showAllCities: $showAllCities
+                    sortByRatingOnly: $sortByRatingOnly
                 )
             }
             .toast(isPresented: $showingLocationToast) {
@@ -216,14 +200,11 @@ struct SpotSearchView: View {
     }
     
     private func getDistanceFromUser(for spot: Spot) -> CLLocationDistance? {
-        if let userLocation = locationService.currentLocation {
-            let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
-            return userLocation.distance(from: spotLocation)
-        } else {
-            // Use default location (Boise) as fallback
-            let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
-            return defaultLocation.distance(from: spotLocation)
+        guard let userLocation = locationService.currentLocation else {
+            return nil
         }
+        let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
+        return userLocation.distance(from: spotLocation)
     }
 }
 
@@ -270,69 +251,11 @@ struct FilterToggleBar: View {
     @Binding var outletsOnly: Bool
     @Binding var selectedOverallRating: Double
     @Binding var showingFilters: Bool
-    @Binding var selectedCity: String
     @Binding var sortByRatingOnly: Bool
-    @Binding var showAllCities: Bool
     
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: ThemeManager.Spacing.sm) {
-                // City Filter
-                Menu {
-                    Button(action: { 
-                        showAllCities = true
-                        selectedCity = "All Cities"
-                    }) {
-                        HStack {
-                            Text("All Cities")
-                            if showAllCities {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                    Button(action: { 
-                        showAllCities = false
-                        selectedCity = "Boise"
-                    }) {
-                        HStack {
-                            Text("Boise")
-                            if !showAllCities && selectedCity == "Boise" {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                    Button(action: { 
-                        showAllCities = false
-                        selectedCity = "Austin"
-                    }) {
-                        HStack {
-                            Text("Austin")
-                            if !showAllCities && selectedCity == "Austin" {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                    Button(action: { 
-                        showAllCities = false
-                        selectedCity = "Seattle"
-                    }) {
-                        HStack {
-                            Text("Seattle")
-                            if !showAllCities && selectedCity == "Seattle" {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                } label: {
-                    FilterChip(
-                        title: showAllCities ? "All Cities" : selectedCity,
-                        icon: "location",
-                        isActive: true,
-                        color: ThemeManager.Colors.primary
-                    )
-                }
-                .accessibilityLabel("City filter: \(showAllCities ? "All Cities" : selectedCity)")
-                
                 // Sort Toggle
                 Button(action: { sortByRatingOnly.toggle() }) {
                     FilterChip(
@@ -561,9 +484,7 @@ struct FilterDetailView: View {
     @Binding var selectedNoiseRating: NoiseRating?
     @Binding var outletsOnly: Bool
     @Binding var selectedOverallRating: Double
-    @Binding var selectedCity: String
     @Binding var sortByRatingOnly: Bool
-    @Binding var showAllCities: Bool
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -588,81 +509,6 @@ struct FilterDetailView: View {
                     .padding(.top, ThemeManager.Spacing.lg)
                     
                     VStack(spacing: ThemeManager.Spacing.lg) {
-                        // City Selection
-                        VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
-                            HStack {
-                                Image(systemName: "location")
-                                    .foregroundColor(ThemeManager.Colors.primary)
-                                Text("City")
-                                    .font(ThemeManager.Typography.dynamicHeadline())
-                                    .foregroundColor(ThemeManager.Colors.textPrimary)
-                            }
-                            
-                            VStack(spacing: ThemeManager.Spacing.sm) {
-                                Button(action: { 
-                                    showAllCities = true
-                                    selectedCity = "All Cities"
-                                }) {
-                                    HStack {
-                                        Image(systemName: showAllCities ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(ThemeManager.Colors.accent)
-                                        Text("All Cities")
-                                            .font(ThemeManager.Typography.dynamicBody())
-                                            .foregroundColor(ThemeManager.Colors.textPrimary)
-                                        Spacer()
-                                    }
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                
-                                Button(action: { 
-                                    showAllCities = false
-                                    selectedCity = "Boise"
-                                }) {
-                                    HStack {
-                                        Image(systemName: (!showAllCities && selectedCity == "Boise") ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(ThemeManager.Colors.accent)
-                                        Text("Boise")
-                                            .font(ThemeManager.Typography.dynamicBody())
-                                            .foregroundColor(ThemeManager.Colors.textPrimary)
-                                        Spacer()
-                                    }
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                
-                                Button(action: { 
-                                    showAllCities = false
-                                    selectedCity = "Austin"
-                                }) {
-                                    HStack {
-                                        Image(systemName: (!showAllCities && selectedCity == "Austin") ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(ThemeManager.Colors.accent)
-                                        Text("Austin")
-                                            .font(ThemeManager.Typography.dynamicBody())
-                                            .foregroundColor(ThemeManager.Colors.textPrimary)
-                                        Spacer()
-                                    }
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                
-                                Button(action: { 
-                                    showAllCities = false
-                                    selectedCity = "Seattle"
-                                }) {
-                                    HStack {
-                                        Image(systemName: (!showAllCities && selectedCity == "Seattle") ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(ThemeManager.Colors.accent)
-                                        Text("Seattle")
-                                            .font(ThemeManager.Typography.dynamicBody())
-                                            .foregroundColor(ThemeManager.Colors.textPrimary)
-                                        Spacer()
-                                    }
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                        }
-                        .padding()
-                        .background(ThemeManager.Colors.surface)
-                        .cornerRadius(ThemeManager.CornerRadius.md)
                         
                         // Sort Options
                         VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
@@ -844,9 +690,7 @@ struct FilterDetailView: View {
         selectedNoiseRating = nil
         outletsOnly = false
         selectedOverallRating = 1.0
-        selectedCity = "Boise"
         sortByRatingOnly = false
-        showAllCities = false
     }
 }
 
