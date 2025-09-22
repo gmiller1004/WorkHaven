@@ -39,10 +39,9 @@ class SpotViewModel: ObservableObject {
             UserDefaults.standard.set(true, forKey: "DataWiped")
         }
         
-        // Start seeding process
-        Task {
-            await performAutoSeeding()
-        }
+        // Only start seeding if CloudKit is enabled (to prevent pulling old data)
+        // For fresh start, use the Complete Reset button in Settings
+        print("🚀 SpotViewModel initialized - use Complete Reset in Settings to discover fresh spots")
     }
     
     private func wipeAllData() {
@@ -481,5 +480,52 @@ class SpotViewModel: ObservableObject {
     
     func hasDiscoveryAPIKey() -> Bool {
         return spotDiscoveryService.hasGrokAPIKey()
+    }
+    
+    func performFreshDiscovery() async {
+        await MainActor.run {
+            isSeeding = true
+            seedingStatus = "Starting fresh discovery..."
+            errorMessage = nil
+        }
+        
+        do {
+            // Get user location
+            guard let userLocation = await getCurrentUserLocation() else {
+                await MainActor.run {
+                    isSeeding = false
+                    seedingStatus = "Location required"
+                    errorMessage = "Location access is required to find nearby work spots. Please enable location services in Settings."
+                }
+                return
+            }
+            
+            // Discover new spots
+            await MainActor.run {
+                seedingStatus = "Discovering nearby work spots..."
+            }
+            
+            let discoveredSpots = await spotDiscoveryService.discoverSpots(near: userLocation, radius: discoveryRadius)
+            
+            await MainActor.run {
+                spots = discoveredSpots
+                isSeeding = false
+                seedingStatus = discoveredSpots.isEmpty ? "No spots found in area" : "Discovered \(discoveredSpots.count) new spots"
+                
+                if discoveredSpots.isEmpty {
+                    errorMessage = "No work spots found in your area. Try enabling location services or check your internet connection."
+                }
+            }
+            
+            // Recalculate overall ratings after seeding
+            await recalculateOverallRatings()
+            
+        } catch {
+            await MainActor.run {
+                isSeeding = false
+                seedingStatus = "Discovery failed"
+                errorMessage = "Failed to discover spots: \(error.localizedDescription)"
+            }
+        }
     }
 }

@@ -380,6 +380,25 @@ struct SettingsView: View {
                     .accessibilityHint("Double tap to completely wipe all data (debug only)")
                     
                     Button(action: {
+                        Task {
+                            await completeReset()
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise.circle.fill")
+                                .foregroundColor(ThemeManager.Colors.warning)
+                            Text("Complete Reset (Debug)")
+                                .font(ThemeManager.Typography.dynamicBody())
+                                .foregroundColor(ThemeManager.Colors.textPrimary)
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                                .foregroundColor(ThemeManager.Colors.textSecondary)
+                        }
+                    }
+                    .accessibilityLabel("Complete Reset Debug")
+                    .accessibilityHint("Double tap to completely reset app and discover new spots")
+                    
+                    Button(action: {
                         showingDatabaseReset = true
                     }) {
                         HStack {
@@ -651,6 +670,69 @@ struct SettingsView: View {
             await MainActor.run {
                 seedingStatus = "Database wipe failed"
                 seedingAlertMessage = "Failed to wipe database: \(error.localizedDescription)"
+                showingSeedingAlert = true
+                isSeeding = false
+            }
+        }
+    }
+    
+    private func completeReset() async {
+        await MainActor.run {
+            seedingStatus = "Starting complete reset..."
+            isSeeding = true
+        }
+        
+        do {
+            // Step 1: Wipe local Core Data
+            let context = PersistenceController.shared.container.viewContext
+            
+            // Delete all Spot entities
+            let spotFetchRequest: NSFetchRequest<NSFetchRequestResult> = Spot.fetchRequest()
+            let spotDeleteRequest = NSBatchDeleteRequest(fetchRequest: spotFetchRequest)
+            
+            // Delete all UserRating entities
+            let ratingFetchRequest: NSFetchRequest<NSFetchRequestResult> = UserRating.fetchRequest()
+            let ratingDeleteRequest = NSBatchDeleteRequest(fetchRequest: ratingFetchRequest)
+            
+            try context.execute(spotDeleteRequest)
+            try context.execute(ratingDeleteRequest)
+            try context.save()
+            
+            await MainActor.run {
+                seedingStatus = "Local data wiped, clearing CloudKit..."
+            }
+            
+            // Step 2: Wipe CloudKit data
+            let cloudKitManager = CloudKitManager(context: context)
+            await cloudKitManager.clearCloudKitRecords()
+            
+            await MainActor.run {
+                seedingStatus = "CloudKit cleared, resetting flags..."
+            }
+            
+            // Step 3: Reset UserDefaults flags
+            UserDefaults.standard.set(false, forKey: "DataWiped")
+            UserDefaults.standard.set(false, forKey: "CloudKitCleared")
+            
+            await MainActor.run {
+                seedingStatus = "Starting fresh discovery..."
+            }
+            
+            // Step 4: Trigger fresh discovery
+            let spotViewModel = SpotViewModel(context: context)
+            await spotViewModel.performFreshDiscovery()
+            
+            await MainActor.run {
+                seedingStatus = "Complete reset successful!"
+                seedingAlertMessage = "App has been completely reset. Fresh spots will be discovered based on your current location."
+                showingSeedingAlert = true
+                isSeeding = false
+            }
+            
+        } catch {
+            await MainActor.run {
+                seedingStatus = "Complete reset failed"
+                seedingAlertMessage = "Failed to complete reset: \(error.localizedDescription)"
                 showingSeedingAlert = true
                 isSeeding = false
             }
