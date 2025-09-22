@@ -3,7 +3,7 @@
 //  WorkHaven
 //
 //  Created by Greg Miller on 9/19/25.
-//  Updated with comprehensive rating system including aggregate and user ratings
+//  Updated with comprehensive rating system, auto-seeding, and location-based discovery
 //
 
 import Foundation
@@ -16,16 +16,167 @@ import MapKit
 class SpotViewModel: ObservableObject {
     @Published var spots: [Spot] = []
     @Published var isLoading = false
+    @Published var isSeeding = false
     @Published var errorMessage: String?
+    @Published var seedingStatus = ""
     
     private let viewContext: NSManagedObjectContext
+    private let locationService = LocationService()
+    private let spotDiscoveryService = SpotDiscoveryService.shared
+    private let discoveryRadius: CLLocationDistance = 32186.88 // 20 miles in meters
     
     init(context: NSManagedObjectContext) {
         self.viewContext = context
-        fetchSpots()
+        setupInitialData()
+    }
+    
+    // MARK: - Initial Setup and Auto-Seeding
+    
+    private func setupInitialData() {
+        // Check if we need to wipe data (first launch)
+        if !UserDefaults.standard.bool(forKey: "DataWiped") {
+            wipeAllData()
+            UserDefaults.standard.set(true, forKey: "DataWiped")
+        }
+        
+        // Start seeding process
+        Task {
+            await performAutoSeeding()
+        }
+    }
+    
+    private func wipeAllData() {
+        print("🗑️ Wiping all Core Data on first launch...")
+        
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = Spot.fetchRequest()
+        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+        
+        do {
+            try viewContext.execute(deleteRequest)
+            try viewContext.save()
+            print("✅ All data wiped successfully")
+        } catch {
+            print("❌ Error wiping data: \(error)")
+            errorMessage = "Failed to reset data: \(error.localizedDescription)"
+        }
+    }
+    
+    private func performAutoSeeding() async {
+        await MainActor.run {
+            isSeeding = true
+            seedingStatus = "Starting auto-seeding..."
+            errorMessage = nil
+        }
+        
+        do {
+            // Get user location
+            let userLocation = await getCurrentUserLocation()
+            
+            // Check for existing spots within radius
+            let existingSpots = await checkSpotsWithinRadius(userLocation: userLocation)
+            
+            if existingSpots.count >= 1 {
+                await MainActor.run {
+                    spots = existingSpots
+                    isSeeding = false
+                    seedingStatus = "Found \(existingSpots.count) existing spots"
+                }
+                return
+            }
+            
+            // Discover new spots if we have less than 1
+            await MainActor.run {
+                seedingStatus = "Discovering nearby work spots..."
+            }
+            
+            let discoveredSpots = await spotDiscoveryService.discoverSpots(near: userLocation, radius: discoveryRadius)
+            
+            await MainActor.run {
+                spots = discoveredSpots
+                isSeeding = false
+                seedingStatus = discoveredSpots.isEmpty ? "No spots found in area" : "Discovered \(discoveredSpots.count) new spots"
+                
+                if discoveredSpots.isEmpty {
+                    errorMessage = "No work spots found in your area. Try enabling location services or check your internet connection."
+                }
+            }
+            
+            // Recalculate overall ratings after seeding
+            await recalculateOverallRatings()
+            
+        } catch {
+            await MainActor.run {
+                isSeeding = false
+                seedingStatus = "Seeding failed"
+                errorMessage = "Failed to seed data: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    private func getCurrentUserLocation() async -> CLLocation {
+        // Request location permission
+        locationService.requestLocationPermission()
+        
+        // Wait for location with timeout
+        let timeout: TimeInterval = 10.0
+        let startTime = Date()
+        
+        while locationService.currentLocation == nil && Date().timeIntervalSince(startTime) < timeout {
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        }
+        
+        // Return user location or fallback to Boise, ID
+        return locationService.currentLocation ?? CLLocation(latitude: 43.6150, longitude: -116.2023)
+    }
+    
+    private func checkSpotsWithinRadius(userLocation: CLLocation) async -> [Spot] {
+        let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
+        
+        do {
+            let allSpots = try viewContext.fetch(fetchRequest)
+            let nearbySpots = allSpots.filter { spot in
+                let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
+                return userLocation.distance(from: spotLocation) <= discoveryRadius
+            }
+            return nearbySpots
+        } catch {
+            print("❌ Error checking existing spots: \(error)")
+            return []
+        }
+    }
+    
+    private func recalculateOverallRatings() async {
+        await MainActor.run {
+            seedingStatus = "Recalculating ratings..."
+        }
+        
+        // Force recalculation of overall ratings by touching the spots
+        for spot in spots {
+            spot.lastModified = Date()
+        }
+        
+        do {
+            try viewContext.save()
+            await MainActor.run {
+                seedingStatus = "Ratings updated successfully"
+            }
+        } catch {
+            print("❌ Error recalculating ratings: \(error)")
+        }
+    }
+    
+    // MARK: - Public Seeding Methods
+    
+    func refreshSpots() async {
+        await performAutoSeeding()
+    }
+    
+    func manualSeed() async {
+        await performAutoSeeding()
     }
     
     // MARK: - Fetch Operations
+    
     func fetchSpots() {
         isLoading = true
         errorMessage = nil
@@ -48,6 +199,11 @@ class SpotViewModel: ObservableObject {
     /// Gets overall rating for a spot (uses the computed property from SpotModel)
     func overallRating(for spot: Spot) -> Double {
         return spot.overallRating
+    }
+    
+    /// Gets average user rating for a spot
+    func averageUserRating(for spot: Spot) -> Double {
+        return spot.averageUserRating ?? 0.0
     }
     
     /// Gets rating color based on rating value using ThemeManager colors
@@ -100,6 +256,7 @@ class SpotViewModel: ObservableObject {
     }
     
     // MARK: - CRUD Operations
+    
     func addSpot(name: String, address: String, latitude: Double, longitude: Double, 
                 wifiRating: Int16, noiseRating: String, outlets: Bool, tips: String?, photoURL: String?) {
         let newSpot = Spot(context: viewContext)
@@ -226,6 +383,7 @@ class SpotViewModel: ObservableObject {
     }
 
     // MARK: - Search and Filter
+    
     func searchSpots(query: String) -> [Spot] {
         if query.isEmpty {
             return spots
@@ -293,6 +451,7 @@ class SpotViewModel: ObservableObject {
     }
     
     // MARK: - Public Methods
+    
     func saveContext() {
         do {
             try viewContext.save()
@@ -301,5 +460,19 @@ class SpotViewModel: ObservableObject {
             errorMessage = "Failed to save spot: \(error.localizedDescription)"
             print("Save error: \(error)")
         }
+    }
+    
+    // MARK: - Discovery Service Integration
+    
+    func configureDiscoveryService() {
+        spotDiscoveryService.configure(with: viewContext)
+    }
+    
+    func getDiscoveryStatus() -> String {
+        return spotDiscoveryService.getGrokAPIKeyStatus()
+    }
+    
+    func hasDiscoveryAPIKey() -> Bool {
+        return spotDiscoveryService.hasGrokAPIKey()
     }
 }
