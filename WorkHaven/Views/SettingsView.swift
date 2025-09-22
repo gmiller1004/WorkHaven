@@ -3,6 +3,7 @@
 //  WorkHaven
 //
 //  Created by Greg Miller on 9/19/25.
+//  Updated with auto-discovery controls, location-based spot seeding, and ThemeManager styling
 //
 
 import SwiftUI
@@ -11,10 +12,17 @@ import CoreData
 
 struct SettingsView: View {
     @StateObject private var notificationManager: NotificationManager
+    @StateObject private var spotDiscoveryService = SpotDiscoveryService.shared
+    @StateObject private var locationService = LocationService()
     @State private var showingPermissionAlert = false
     @State private var permissionAlertMessage = ""
     @State private var notificationRadius: Double = 5000
     @State private var showingRadiusPicker = false
+    @State private var isAutoDiscoverEnabled = false
+    @State private var isSeeding = false
+    @State private var seedingStatus = ""
+    @State private var showingSeedingAlert = false
+    @State private var seedingAlertMessage = ""
     
     init(context: NSManagedObjectContext) {
         _notificationManager = StateObject(wrappedValue: NotificationManager(context: context))
@@ -23,18 +31,118 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             Form {
+                // Auto-Discovery Section
+                Section {
+                    VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
+                        // Auto-Discover Toggle
+                        Toggle(isOn: $isAutoDiscoverEnabled) {
+                            HStack(spacing: ThemeManager.Spacing.sm) {
+                                Image(systemName: "location.magnifyingglass")
+                                    .foregroundColor(ThemeManager.Colors.primary)
+                                    .font(ThemeManager.Typography.dynamicHeadline())
+                                
+                                VStack(alignment: .leading, spacing: ThemeManager.Spacing.xs) {
+                                    Text("Auto-Discover Spots")
+                                        .font(ThemeManager.Typography.dynamicHeadline())
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(ThemeManager.Colors.textPrimary)
+                                    
+                                    Text("Find nearby spots using Apple Maps and AI (requires location/internet)")
+                                        .font(ThemeManager.Typography.dynamicCaption())
+                                        .foregroundColor(ThemeManager.Colors.textSecondary)
+                                        .lineLimit(2)
+                                }
+                            }
+                        }
+                        .tint(ThemeManager.Colors.primary)
+                        .onChange(of: isAutoDiscoverEnabled) { enabled in
+                            handleAutoDiscoverToggle(enabled: enabled)
+                        }
+                        .accessibilityLabel("Toggle auto-discover spots")
+                        .accessibilityHint("Double tap to enable or disable automatic spot discovery using your location and AI")
+                        
+                        // Regenerate Now Button
+                        if isAutoDiscoverEnabled {
+                            Button(action: {
+                                Task {
+                                    await regenerateSpots()
+                                }
+                            }) {
+                                HStack {
+                                    if isSeeding {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: ThemeManager.Colors.surface))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Image(systemName: "arrow.clockwise")
+                                    }
+                                    
+                                    Text(isSeeding ? "Discovering..." : "Regenerate Now")
+                                        .font(ThemeManager.Typography.dynamicBody())
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(ThemeManager.Colors.surface)
+                                .padding(.horizontal, ThemeManager.Spacing.lg)
+                                .padding(.vertical, ThemeManager.Spacing.md)
+                                .background(ThemeManager.Colors.primary)
+                                .cornerRadius(ThemeManager.CornerRadius.md)
+                                .shadow(
+                                    color: ThemeManager.Shadows.sm.color,
+                                    radius: ThemeManager.Shadows.sm.radius,
+                                    x: ThemeManager.Shadows.sm.x,
+                                    y: ThemeManager.Shadows.sm.y
+                                )
+                            }
+                            .disabled(isSeeding)
+                            .accessibilityLabel("Regenerate spots now")
+                            .accessibilityHint("Double tap to discover new work spots in your area")
+                            
+                            // Seeding Status
+                            if !seedingStatus.isEmpty {
+                                HStack {
+                                    Image(systemName: "info.circle")
+                                        .foregroundColor(ThemeManager.Colors.accent)
+                                        .font(ThemeManager.Typography.dynamicCaption())
+                                    
+                                    Text(seedingStatus)
+                                        .font(ThemeManager.Typography.dynamicCaption())
+                                        .foregroundColor(ThemeManager.Colors.textSecondary)
+                                }
+                                .padding(.horizontal, ThemeManager.Spacing.sm)
+                                .padding(.vertical, ThemeManager.Spacing.xs)
+                                .background(ThemeManager.Colors.background)
+                                .cornerRadius(ThemeManager.CornerRadius.sm)
+                            }
+                        }
+                    }
+                    .padding(.vertical, ThemeManager.Spacing.sm)
+                } header: {
+                    Text("Spot Discovery")
+                } footer: {
+                    VStack(alignment: .leading, spacing: ThemeManager.Spacing.xs) {
+                        Text("When enabled, WorkHaven will automatically discover nearby work spots using your location and AI-powered enrichment.")
+                        
+                        if !spotDiscoveryService.hasGrokAPIKey() {
+                            Text("⚠️ API key not configured. Add GROK_API_KEY to secrets.xcconfig for AI enrichment.")
+                                .foregroundColor(ThemeManager.Colors.warning)
+                                .fontWeight(.medium)
+                        }
+                    }
+                }
+                
                 // Notification Status Section
                 Section {
                     HStack {
                         Image(systemName: notificationManager.isAuthorized ? "bell.fill" : "bell.slash")
-                            .foregroundColor(notificationManager.isAuthorized ? .green : .red)
+                            .foregroundColor(notificationManager.isAuthorized ? ThemeManager.Colors.success : ThemeManager.Colors.error)
                         
                         VStack(alignment: .leading) {
                             Text("Notifications")
-                                .font(.headline)
+                                .font(ThemeManager.Typography.dynamicHeadline())
+                                .foregroundColor(ThemeManager.Colors.textPrimary)
                             Text(notificationManager.isAuthorized ? "Enabled" : "Disabled")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                                .font(ThemeManager.Typography.dynamicCaption())
+                                .foregroundColor(ThemeManager.Colors.textSecondary)
                         }
                         
                         Spacer()
@@ -43,8 +151,7 @@ struct SettingsView: View {
                             Button("Enable") {
                                 requestNotificationPermission()
                             }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
+                            .themedButton(style: .primary)
                         }
                     }
                 } header: {
@@ -52,6 +159,8 @@ struct SettingsView: View {
                 } footer: {
                     if !notificationManager.isAuthorized {
                         Text("Enable notifications to receive alerts about new work spots and hot spots in your area.")
+                            .font(ThemeManager.Typography.dynamicCaption())
+                            .foregroundColor(ThemeManager.Colors.textSecondary)
                     }
                 }
                 
@@ -63,61 +172,66 @@ struct SettingsView: View {
                             get: { notificationManager.locationNotificationsEnabled },
                             set: { notificationManager.updateLocationNotifications($0) }
                         )) {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: ThemeManager.Spacing.xs) {
                                 HStack {
                                     Image(systemName: "location.fill")
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(ThemeManager.Colors.accent)
                                     Text("Nearby Spots")
-                                        .font(.headline)
+                                        .font(ThemeManager.Typography.dynamicHeadline())
+                                        .foregroundColor(ThemeManager.Colors.textPrimary)
                                 }
                                 Text("Get notified when new spots are added near you")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .font(ThemeManager.Typography.dynamicCaption())
+                                    .foregroundColor(ThemeManager.Colors.textSecondary)
                             }
                         }
-                        .tint(.blue)
+                        .tint(ThemeManager.Colors.accent)
                         
                         // Hot spot notifications
                         Toggle(isOn: Binding(
                             get: { notificationManager.hotSpotNotificationsEnabled },
                             set: { notificationManager.updateHotSpotNotifications($0) }
                         )) {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: ThemeManager.Spacing.xs) {
                                 HStack {
                                     Image(systemName: "flame.fill")
-                                        .foregroundColor(.orange)
+                                        .foregroundColor(ThemeManager.Colors.warning)
                                     Text("Hot Spots")
-                                        .font(.headline)
+                                        .font(ThemeManager.Typography.dynamicHeadline())
+                                        .foregroundColor(ThemeManager.Colors.textPrimary)
                                 }
                                 Text("Alerts for highly-rated spots (4+ stars)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .font(ThemeManager.Typography.dynamicCaption())
+                                    .foregroundColor(ThemeManager.Colors.textSecondary)
                             }
                         }
-                        .tint(.orange)
+                        .tint(ThemeManager.Colors.warning)
                         
                         // New spot notifications
                         Toggle(isOn: Binding(
                             get: { notificationManager.newSpotNotificationsEnabled },
                             set: { notificationManager.updateNewSpotNotifications($0) }
                         )) {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: ThemeManager.Spacing.xs) {
                                 HStack {
                                     Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(.green)
+                                        .foregroundColor(ThemeManager.Colors.success)
                                     Text("New Spots")
-                                        .font(.headline)
+                                        .font(ThemeManager.Typography.dynamicHeadline())
+                                        .foregroundColor(ThemeManager.Colors.textPrimary)
                                 }
                                 Text("Notifications when any new spot is added")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .font(ThemeManager.Typography.dynamicCaption())
+                                    .foregroundColor(ThemeManager.Colors.textSecondary)
                             }
                         }
-                        .tint(.green)
+                        .tint(ThemeManager.Colors.success)
                     } header: {
                         Text("Notification Types")
                     } footer: {
                         Text("Customize which types of notifications you'd like to receive.")
+                            .font(ThemeManager.Typography.dynamicCaption())
+                            .foregroundColor(ThemeManager.Colors.textSecondary)
                     }
                 }
                 
@@ -126,14 +240,15 @@ struct SettingsView: View {
                     Section {
                         HStack {
                             Image(systemName: "location.circle")
-                                .foregroundColor(.blue)
+                                .foregroundColor(ThemeManager.Colors.accent)
                             
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: ThemeManager.Spacing.xs) {
                                 Text("Notification Radius")
-                                    .font(.headline)
+                                    .font(ThemeManager.Typography.dynamicHeadline())
+                                    .foregroundColor(ThemeManager.Colors.textPrimary)
                                 Text("\(Int(notificationRadius / 1000))km")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .font(ThemeManager.Typography.dynamicCaption())
+                                    .foregroundColor(ThemeManager.Colors.textSecondary)
                             }
                             
                             Spacer()
@@ -141,20 +256,19 @@ struct SettingsView: View {
                             Button("Change") {
                                 showingRadiusPicker = true
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
+                            .themedButton(style: .secondary)
                         }
                         
                         // Radius slider
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
                             HStack {
                                 Text("1km")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .font(ThemeManager.Typography.dynamicCaption())
+                                    .foregroundColor(ThemeManager.Colors.textSecondary)
                                 Spacer()
                                 Text("10km")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .font(ThemeManager.Typography.dynamicCaption())
+                                    .foregroundColor(ThemeManager.Colors.textSecondary)
                             }
                             
                             Slider(
@@ -165,11 +279,12 @@ struct SettingsView: View {
                                 Text("Radius")
                             } minimumValueLabel: {
                                 Text("1km")
-                                    .font(.caption)
+                                    .font(ThemeManager.Typography.dynamicCaption())
                             } maximumValueLabel: {
                                 Text("10km")
-                                    .font(.caption)
+                                    .font(ThemeManager.Typography.dynamicCaption())
                             }
+                            .tint(ThemeManager.Colors.accent)
                             .onChange(of: notificationRadius) { newValue in
                                 notificationManager.updateNotificationRadius(newValue)
                             }
@@ -178,6 +293,8 @@ struct SettingsView: View {
                         Text("Location Settings")
                     } footer: {
                         Text("Choose how far from your location you want to receive notifications about new spots.")
+                            .font(ThemeManager.Typography.dynamicCaption())
+                            .foregroundColor(ThemeManager.Colors.textSecondary)
                     }
                 }
                 
@@ -189,28 +306,30 @@ struct SettingsView: View {
                         }) {
                             HStack {
                                 Image(systemName: "bell.badge")
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(ThemeManager.Colors.accent)
                                 Text("Send Test Notification")
+                                    .font(ThemeManager.Typography.dynamicBody())
+                                    .foregroundColor(ThemeManager.Colors.textPrimary)
                                 Spacer()
                                 Image(systemName: "arrow.right")
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(ThemeManager.Colors.textSecondary)
                             }
                         }
-                        .foregroundColor(.primary)
                         
                         Button(action: {
                             clearAllNotifications()
                         }) {
                             HStack {
                                 Image(systemName: "trash")
-                                    .foregroundColor(.red)
+                                    .foregroundColor(ThemeManager.Colors.error)
                                 Text("Clear All Notifications")
+                                    .font(ThemeManager.Typography.dynamicBody())
+                                    .foregroundColor(ThemeManager.Colors.textPrimary)
                                 Spacer()
                                 Image(systemName: "arrow.right")
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(ThemeManager.Colors.textSecondary)
                             }
                         }
-                        .foregroundColor(.primary)
                     } header: {
                         Text("Manage Notifications")
                     }
@@ -220,20 +339,25 @@ struct SettingsView: View {
                 Section {
                     HStack {
                         Image(systemName: "info.circle")
-                            .foregroundColor(.blue)
+                            .foregroundColor(ThemeManager.Colors.accent)
                         Text("App Version")
+                            .font(ThemeManager.Typography.dynamicBody())
+                            .foregroundColor(ThemeManager.Colors.textPrimary)
                         Spacer()
                         Text("1.0.0")
-                            .foregroundColor(.secondary)
+                            .font(ThemeManager.Typography.dynamicBody())
+                            .foregroundColor(ThemeManager.Colors.textSecondary)
                     }
                     
                     HStack {
                         Image(systemName: "questionmark.circle")
-                            .foregroundColor(.blue)
+                            .foregroundColor(ThemeManager.Colors.accent)
                         Text("Help & Support")
+                            .font(ThemeManager.Typography.dynamicBody())
+                            .foregroundColor(ThemeManager.Colors.textPrimary)
                         Spacer()
                         Image(systemName: "arrow.right")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ThemeManager.Colors.textSecondary)
                     }
                     .onTapGesture {
                         // Handle help action
@@ -244,6 +368,10 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                loadSettings()
+                configureServices()
+            }
             .alert("Permission Required", isPresented: $showingPermissionAlert) {
                 Button("Settings") {
                     openAppSettings()
@@ -251,6 +379,11 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) { }
             } message: {
                 Text(permissionAlertMessage)
+            }
+            .alert("Spot Discovery", isPresented: $showingSeedingAlert) {
+                Button("OK") { }
+            } message: {
+                Text(seedingAlertMessage)
             }
             .sheet(isPresented: $showingRadiusPicker) {
                 RadiusPickerView(
@@ -262,6 +395,86 @@ struct SettingsView: View {
     }
     
     // MARK: - Helper Functions
+    
+    private func loadSettings() {
+        isAutoDiscoverEnabled = UserDefaults.standard.bool(forKey: "AutoDiscoverEnabled")
+    }
+    
+    private func saveSettings() {
+        UserDefaults.standard.set(isAutoDiscoverEnabled, forKey: "AutoDiscoverEnabled")
+    }
+    
+    private func configureServices() {
+        spotDiscoveryService.configure(with: PersistenceController.shared.container.viewContext)
+    }
+    
+    private func handleAutoDiscoverToggle(enabled: Bool) {
+        saveSettings()
+        
+        if enabled {
+            // Request location permission when enabling auto-discover
+            locationService.requestLocationPermission()
+            
+            // Check if we have location permission
+            if locationService.authorizationStatus == .denied || locationService.authorizationStatus == .restricted {
+                permissionAlertMessage = "Location permission is required for auto-discovery. Please enable location access in Settings."
+                showingPermissionAlert = true
+                isAutoDiscoverEnabled = false
+                saveSettings()
+            }
+        }
+    }
+    
+    private func regenerateSpots() async {
+        await MainActor.run {
+            isSeeding = true
+            seedingStatus = "Starting spot discovery..."
+        }
+        
+        do {
+            // Get current location
+            let userLocation = await getCurrentUserLocation()
+            
+            // Discover spots
+            let discoveredSpots = await spotDiscoveryService.discoverSpots(near: userLocation, radius: 32186.88) // 20 miles
+            
+            await MainActor.run {
+                isSeeding = false
+                seedingStatus = "Discovery completed"
+                
+                if discoveredSpots.isEmpty {
+                    seedingAlertMessage = "No new work spots found in your area. Try again later or check your internet connection."
+                    showingSeedingAlert = true
+                } else {
+                    seedingAlertMessage = "Successfully discovered \(discoveredSpots.count) new work spots!"
+                    showingSeedingAlert = true
+                }
+            }
+            
+        } catch {
+            await MainActor.run {
+                isSeeding = false
+                seedingStatus = "Discovery failed"
+                seedingAlertMessage = "Failed to discover spots: \(error.localizedDescription)"
+                showingSeedingAlert = true
+            }
+        }
+    }
+    
+    private func getCurrentUserLocation() async -> CLLocation {
+        locationService.requestLocationPermission()
+        
+        // Wait for location with timeout
+        let timeout: TimeInterval = 10.0
+        let startTime = Date()
+        
+        while locationService.currentLocation == nil && Date().timeIntervalSince(startTime) < timeout {
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        }
+        
+        // Return user location or fallback to Boise, ID
+        return locationService.currentLocation ?? CLLocation(latitude: 43.6150, longitude: -116.2023)
+    }
     
     private func requestNotificationPermission() {
         notificationManager.requestNotificationPermission()
@@ -318,10 +531,12 @@ struct RadiusPickerView: View {
                 ForEach(radiusOptions, id: \.0) { option in
                     HStack {
                         Text(option.1)
+                            .font(ThemeManager.Typography.dynamicBody())
+                            .foregroundColor(ThemeManager.Colors.textPrimary)
                         Spacer()
                         if abs(radius - option.0) < 100 {
                             Image(systemName: "checkmark")
-                                .foregroundColor(.blue)
+                                .foregroundColor(ThemeManager.Colors.accent)
                         }
                     }
                     .contentShape(Rectangle())
@@ -338,6 +553,7 @@ struct RadiusPickerView: View {
                     Button("Done") {
                         isPresented = false
                     }
+                    .themedButton(style: .primary)
                 }
             }
         }
