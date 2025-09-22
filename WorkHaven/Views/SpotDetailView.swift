@@ -14,7 +14,6 @@ struct SpotDetailView: View {
     let spot: Spot
     let viewModel: SpotViewModel
     @StateObject private var locationService = LocationService()
-    @StateObject private var geocodingService = GeocodingService.shared
     @State private var showingEditView = false
     @State private var showingRatingForm = false
     @State private var showingShareView = false
@@ -24,12 +23,6 @@ struct SpotDetailView: View {
     @State private var showingSaveAlert = false
     @State private var saveMessage = ""
     
-    // Location verification states
-    @State private var isVerifyingLocation = false
-    @State private var showingLocationPicker = false
-    @State private var geocodedPlacemarks: [CLPlacemark] = []
-    @State private var showingLocationError = false
-    @State private var locationErrorMessage = ""
     
     var body: some View {
         ScrollView {
@@ -104,11 +97,7 @@ struct SpotDetailView: View {
                 // Map Section with Location Verification
                 MapSectionWithVerification(
                     spot: spot,
-                    openInAppleMaps: openInAppleMaps,
-                    isVerifyingLocation: $isVerifyingLocation,
-                    showingLocationPicker: $showingLocationPicker,
-                    geocodedPlacemarks: $geocodedPlacemarks,
-                    verifyLocation: verifyLocation
+                    openInAppleMaps: openInAppleMaps
                 )
             }
             .padding(.horizontal, ThemeManager.Spacing.md)
@@ -131,27 +120,14 @@ struct SpotDetailView: View {
         .sheet(isPresented: $showingShareView) {
             SpotShareView(spot: spot)
         }
-        .sheet(isPresented: $showingLocationPicker) {
-            LocationPickerSheet(
-                placemarks: geocodedPlacemarks,
-                onSelect: selectLocation,
-                onCancel: { showingLocationPicker = false }
-            )
-        }
         .onAppear {
             locationService.requestLocationPermission()
             loadUserData()
-            configureGeocodingService()
         }
         .alert("Saved", isPresented: $showingSaveAlert) {
             Button("OK") { }
         } message: {
             Text(saveMessage)
-        }
-        .alert("Location Verification Failed", isPresented: $showingLocationError) {
-            Button("OK") { }
-        } message: {
-            Text(locationErrorMessage)
         }
     }
     
@@ -165,76 +141,6 @@ struct SpotDetailView: View {
         userTips = ""
     }
     
-    private func configureGeocodingService() {
-        Task {
-            await geocodingService.configure(with: spot.managedObjectContext!)
-        }
-    }
-    
-    private func verifyLocation() {
-        guard let address = spot.address, !address.isEmpty else {
-            locationErrorMessage = "No address available for verification"
-            showingLocationError = true
-            return
-        }
-        
-        isVerifyingLocation = true
-        
-        Task {
-            do {
-                let placemarks = try await geocodingService.geocodeAddress(address)
-                
-                await MainActor.run {
-                    isVerifyingLocation = false
-                    
-                    if placemarks.count == 1 {
-                        // Single result - update directly
-                        selectLocation(placemarks[0])
-                    } else if placemarks.count > 1 {
-                        // Multiple results - show picker
-                        geocodedPlacemarks = placemarks
-                        showingLocationPicker = true
-                    } else {
-                        // No results
-                        locationErrorMessage = "No location found for this address. Using approximate location."
-                        showingLocationError = true
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    isVerifyingLocation = false
-                    locationErrorMessage = "Verification failed—using approximate location"
-                    showingLocationError = true
-                }
-            }
-        }
-    }
-    
-    private func selectLocation(_ placemark: CLPlacemark) {
-        guard let location = placemark.location else { return }
-        
-        // Update spot coordinates
-        spot.latitude = location.coordinate.latitude
-        spot.longitude = location.coordinate.longitude
-        spot.lastModified = Date()
-        
-        // Save to Core Data
-        do {
-            try spot.managedObjectContext?.save()
-            
-            // Trigger CloudKit sync
-            Task {
-                // Note: CloudKit sync will be handled by the app's CloudKitManager instance
-                // This is a placeholder for future CloudKit integration
-            }
-            
-            saveMessage = "Location updated successfully"
-            showingSaveAlert = true
-        } catch {
-            locationErrorMessage = "Failed to save updated location"
-            showingLocationError = true
-        }
-    }
     
     private func openInAppleMaps() {
         let coordinate = CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude)
@@ -250,21 +156,13 @@ struct SpotDetailView: View {
 struct MapSectionWithVerification: View {
     let spot: Spot
     let openInAppleMaps: () -> Void
-    @Binding var isVerifyingLocation: Bool
-    @Binding var showingLocationPicker: Bool
-    @Binding var geocodedPlacemarks: [CLPlacemark]
-    let verifyLocation: () -> Void
     
     @State private var region: MKCoordinateRegion
     @State private var hasInitialized = false
     
-    init(spot: Spot, openInAppleMaps: @escaping () -> Void, isVerifyingLocation: Binding<Bool>, showingLocationPicker: Binding<Bool>, geocodedPlacemarks: Binding<[CLPlacemark]>, verifyLocation: @escaping () -> Void) {
+    init(spot: Spot, openInAppleMaps: @escaping () -> Void) {
         self.spot = spot
         self.openInAppleMaps = openInAppleMaps
-        self._isVerifyingLocation = isVerifyingLocation
-        self._showingLocationPicker = showingLocationPicker
-        self._geocodedPlacemarks = geocodedPlacemarks
-        self.verifyLocation = verifyLocation
         // Initialize with spot coordinates
         self._region = State(initialValue: MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude),
@@ -330,125 +228,11 @@ struct MapSectionWithVerification: View {
                 .accessibilityLabel("Navigate to spot")
                 .accessibilityHint("Double tap to open Apple Maps with navigation to this spot")
                 
-                // Verify Location Button
-                Button(action: verifyLocation) {
-                    HStack {
-                        if isVerifyingLocation {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: ThemeManager.Colors.surface))
-                                .scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "location.magnifyingglass")
-                        }
-                        Text(isVerifyingLocation ? "Verifying..." : "Verify Location")
-                    }
-                    .font(ThemeManager.Typography.dynamicBody())
-                    .foregroundColor(ThemeManager.Colors.surface)
-                    .padding(.horizontal, ThemeManager.Spacing.lg)
-                    .padding(.vertical, ThemeManager.Spacing.md)
-                    .background(ThemeManager.Colors.primary)
-                    .cornerRadius(ThemeManager.CornerRadius.md)
-                    .shadow(
-                        color: ThemeManager.Shadows.sm.color,
-                        radius: ThemeManager.Shadows.sm.radius,
-                        x: ThemeManager.Shadows.sm.x,
-                        y: ThemeManager.Shadows.sm.y
-                    )
-                }
-                .disabled(isVerifyingLocation)
-                .accessibilityLabel("Verify spot location on map")
-                .accessibilityHint("Double tap to geocode the address and update coordinates")
             }
         }
     }
 }
 
-// MARK: - Location Picker Sheet
-
-struct LocationPickerSheet: View {
-    let placemarks: [CLPlacemark]
-    let onSelect: (CLPlacemark) -> Void
-    let onCancel: () -> Void
-    
-    var body: some View {
-        NavigationView {
-            VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
-                Text("Multiple locations found for this address. Please select the correct one:")
-                    .font(ThemeManager.Typography.dynamicBody())
-                    .foregroundColor(ThemeManager.Colors.textSecondary)
-                    .padding(.horizontal, ThemeManager.Spacing.md)
-                
-                List(placemarks.indices, id: \.self) { index in
-                    LocationPickerRow(
-                        placemark: placemarks[index],
-                        onSelect: {
-                            onSelect(placemarks[index])
-                        }
-                    )
-                }
-                .listStyle(PlainListStyle())
-            }
-            .navigationTitle("Select Location")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        onCancel()
-                    }
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Location Picker Row
-
-struct LocationPickerRow: View {
-    let placemark: CLPlacemark
-    let onSelect: () -> Void
-    
-    private var formattedAddress: String {
-        var components: [String] = []
-        
-        if let name = placemark.name { components.append(name) }
-        if let thoroughfare = placemark.thoroughfare { components.append(thoroughfare) }
-        if let locality = placemark.locality { components.append(locality) }
-        if let administrativeArea = placemark.administrativeArea { components.append(administrativeArea) }
-        if let country = placemark.country { components.append(country) }
-        
-        return components.joined(separator: ", ")
-    }
-    
-    var body: some View {
-        Button(action: onSelect) {
-            HStack {
-                VStack(alignment: .leading, spacing: ThemeManager.Spacing.xs) {
-                    Text(formattedAddress)
-                        .font(ThemeManager.Typography.dynamicBody())
-                        .foregroundColor(ThemeManager.Colors.textPrimary)
-                        .multilineTextAlignment(.leading)
-                    
-                    if let location = placemark.location {
-                        Text("Lat: \(String(format: "%.4f", location.coordinate.latitude)), Lng: \(String(format: "%.4f", location.coordinate.longitude))")
-                            .font(ThemeManager.Typography.dynamicCaption())
-                            .foregroundColor(ThemeManager.Colors.textSecondary)
-                    }
-                }
-                
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .font(ThemeManager.Typography.dynamicCaption())
-                    .foregroundColor(ThemeManager.Colors.accent)
-            }
-            .padding(.vertical, ThemeManager.Spacing.sm)
-            .padding(.horizontal, ThemeManager.Spacing.md)
-            .background(ThemeManager.Colors.surface)
-            .cornerRadius(ThemeManager.CornerRadius.sm)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
 
 // MARK: - Overall Rating Section
 
