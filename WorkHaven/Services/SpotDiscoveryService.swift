@@ -24,8 +24,6 @@ struct EnrichedSpotData: Codable {
     let noise: String
     let plugs: Bool
     let tip: String
-    let hours: String?
-    let image_url: String?
 }
 
 enum DiscoveryError: LocalizedError {
@@ -198,7 +196,7 @@ class SpotDiscoveryService: ObservableObject {
         }
         
         let prompt = """
-        For \(name) at \(address), estimate WiFi rating (1-5 stars), noise level (Low/Medium/High), plugs (Yes/No), business hours, and a short tip based on typical similar venues. Respond in JSON: {"wifi": number, "noise": "string", "plugs": bool, "tip": "string", "hours": "string", "image_url": "string"}.
+        For \(name) at \(address), estimate WiFi rating (1-5 stars), noise level (Low/Medium/High), plugs (Yes/No), and a short tip based on typical similar venues. Respond in JSON: {"wifi": number, "noise": "string", "plugs": bool, "tip": "string"}.
         """
         
         do {
@@ -267,9 +265,7 @@ class SpotDiscoveryService: ObservableObject {
             wifi: 3,
             noise: "Medium",
             plugs: false,
-            tip: "Auto-discovered",
-            hours: nil,
-            image_url: nil
+            tip: "Auto-discovered"
         )
     }
     
@@ -308,7 +304,7 @@ class SpotDiscoveryService: ObservableObject {
         spot.latitude = mapItem.placemark.coordinate.latitude
         spot.longitude = mapItem.placemark.coordinate.longitude
         
-        // Business info from MapKit
+        // Business info from MapKit (reliable data only)
         if let phoneNumber = mapItem.phoneNumber, !phoneNumber.isEmpty {
             spot.phoneNumber = phoneNumber
         }
@@ -316,13 +312,15 @@ class SpotDiscoveryService: ObservableObject {
             spot.websiteURL = url.absoluteString
         }
         
-        // Enriched data from Grok API
+        // Only use Grok for WiFi, noise, and outlets (not hours/images)
         spot.wifiRating = Int16(enrichedData.wifi)
         spot.noiseRating = enrichedData.noise
         spot.outlets = enrichedData.plugs
         spot.tips = enrichedData.tip
-        spot.businessHours = enrichedData.hours
-        spot.businessImageURL = enrichedData.image_url
+        
+        // Don't use Grok for hours and images - they're unreliable
+        // spot.businessHours = enrichedData.hours
+        // spot.businessImageURL = enrichedData.image_url
         
         spot.lastModified = Date()
         
@@ -376,14 +374,8 @@ class SpotDiscoveryService: ObservableObject {
                                 spot.websiteURL = url.absoluteString
                             }
                             
-                            // Also try to get business hours and images from Grok API
-                            let enrichedData = await enrichSpotWithGrokAPI(mapItem: mapItem)
-                            if let hours = enrichedData?.hours, !hours.isEmpty {
-                                spot.businessHours = hours
-                            }
-                            if let imageURL = enrichedData?.image_url, !imageURL.isEmpty {
-                                spot.businessImageURL = imageURL
-                            }
+                            // Note: Not using Grok for hours/images as they're unreliable
+                            // Apple Maps doesn't provide these directly through MKMapItem
                             
                             print("✅ Migrated business data for: \(name)")
                         }
