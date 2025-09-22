@@ -23,6 +23,7 @@ struct SettingsView: View {
     @State private var seedingStatus = ""
     @State private var showingSeedingAlert = false
     @State private var seedingAlertMessage = ""
+    @State private var showingDatabaseReset = false
     
     init(context: NSManagedObjectContext) {
         _notificationManager = StateObject(wrappedValue: NotificationManager(context: context))
@@ -335,6 +336,51 @@ struct SettingsView: View {
                     }
                 }
                 
+                // Database Management Section
+                Section {
+                    Button(action: {
+                        showingDatabaseReset = true
+                    }) {
+                        HStack {
+                            Image(systemName: "trash.circle")
+                                .foregroundColor(ThemeManager.Colors.error)
+                            Text("Reset Database")
+                                .font(ThemeManager.Typography.dynamicBody())
+                                .foregroundColor(ThemeManager.Colors.textPrimary)
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                                .foregroundColor(ThemeManager.Colors.textSecondary)
+                        }
+                    }
+                    .accessibilityLabel("Reset Database")
+                    .accessibilityHint("Double tap to open database reset options")
+                    
+                    Button(action: {
+                        Task {
+                            await testCloudKitConnection()
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "icloud.and.arrow.up")
+                                .foregroundColor(ThemeManager.Colors.accent)
+                            Text("Test CloudKit Connection")
+                                .font(ThemeManager.Typography.dynamicBody())
+                                .foregroundColor(ThemeManager.Colors.textPrimary)
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                                .foregroundColor(ThemeManager.Colors.textSecondary)
+                        }
+                    }
+                    .accessibilityLabel("Test CloudKit Connection")
+                    .accessibilityHint("Double tap to test CloudKit connectivity")
+                } header: {
+                    Text("Database Management")
+                } footer: {
+                    Text("Reset your database to start fresh. Choose between local, CloudKit, or complete reset.")
+                        .font(ThemeManager.Typography.dynamicCaption())
+                        .foregroundColor(ThemeManager.Colors.textSecondary)
+                }
+                
                 // App Information Section
                 Section {
                     HStack {
@@ -389,6 +435,12 @@ struct SettingsView: View {
                 RadiusPickerView(
                     radius: $notificationRadius,
                     isPresented: $showingRadiusPicker
+                )
+            }
+            .sheet(isPresented: $showingDatabaseReset) {
+                DatabaseResetView(
+                    context: PersistenceController.shared.container.viewContext,
+                    cloudKitManager: CloudKitManager(context: PersistenceController.shared.container.viewContext)
                 )
             }
         }
@@ -506,6 +558,34 @@ struct SettingsView: View {
     private func openAppSettings() {
         if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(settingsUrl)
+        }
+    }
+    
+    private func testCloudKitConnection() async {
+        let cloudKitManager = CloudKitManager(context: PersistenceController.shared.container.viewContext)
+        
+        await MainActor.run {
+            seedingStatus = "Testing CloudKit connection..."
+            isSeeding = true
+        }
+        
+        do {
+            // Test CloudKit connection by trying to sync
+            await cloudKitManager.syncWithCloudKit()
+            
+            await MainActor.run {
+                seedingStatus = "CloudKit connection successful!"
+                seedingAlertMessage = "CloudKit is working properly. Your data will sync across devices."
+                showingSeedingAlert = true
+                isSeeding = false
+            }
+        } catch {
+            await MainActor.run {
+                seedingStatus = "CloudKit connection failed"
+                seedingAlertMessage = "CloudKit connection failed: \(error.localizedDescription)"
+                showingSeedingAlert = true
+                isSeeding = false
+            }
         }
     }
 }
