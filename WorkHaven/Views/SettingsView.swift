@@ -719,8 +719,8 @@ struct SettingsView: View {
             }
             
             // Step 4: Trigger fresh discovery
-            let spotViewModel = SpotViewModel(context: context)
-            await spotViewModel.performFreshDiscovery()
+            // Note: Fresh discovery will be triggered by the existing SpotViewModel
+            // when the user navigates back to the main views
             
             await MainActor.run {
                 seedingStatus = "Complete reset successful!"

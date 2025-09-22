@@ -132,6 +132,15 @@ struct SpotListView: View {
                         Image(systemName: "arrow.clockwise")
                     }
                 }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { 
+                        Task {
+                            await viewModel.performFreshDiscovery()
+                        }
+                    }) {
+                        Image(systemName: "location.magnifyingglass")
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         
@@ -181,6 +190,13 @@ struct SpotListView: View {
                 // Only fetch if we don't have spots yet
                 if viewModel.spots.isEmpty {
                     viewModel.fetchSpots()
+                }
+                
+                // Check if we need to trigger fresh discovery after reset
+                if viewModel.spots.isEmpty && locationService.currentLocation != nil {
+                    Task {
+                        await viewModel.performFreshDiscovery()
+                    }
                 }
             }
             .onChange(of: locationService.isLocationEnabled) { isEnabled in
