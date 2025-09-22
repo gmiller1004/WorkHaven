@@ -45,6 +45,9 @@ struct SpotDetailView: View {
                         .accessibilityLabel("Address: \(spot.address ?? "No address")")
                 }
                 
+                // Business Information Section
+                BusinessInfoSection(spot: spot)
+                
                 // Overall Rating Section
                 OverallRatingSection(spot: spot, viewModel: viewModel)
                 
@@ -575,6 +578,73 @@ struct OriginalTipsSection: View {
             RoundedRectangle(cornerRadius: ThemeManager.CornerRadius.lg)
                 .stroke(ThemeManager.Colors.border, lineWidth: 1)
         )
+    }
+}
+
+// MARK: - Business Information Section
+
+struct BusinessInfoSection: View {
+    let spot: Spot
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
+            // Business Hours
+            if let businessHours = spot.businessHours, !businessHours.isEmpty {
+                VStack(alignment: .leading, spacing: ThemeManager.Spacing.xs) {
+                    HStack {
+                        Image(systemName: "clock")
+                            .foregroundColor(ThemeManager.Colors.accent)
+                            .font(ThemeManager.Typography.dynamicBody())
+                        
+                        Text("Hours")
+                            .font(ThemeManager.Typography.dynamicHeadline())
+                            .foregroundColor(ThemeManager.Colors.textPrimary)
+                    }
+                    
+                    Text(businessHours)
+                        .font(ThemeManager.Typography.dynamicBody())
+                        .foregroundColor(ThemeManager.Colors.textSecondary)
+                        .padding(.leading, ThemeManager.Spacing.lg)
+                }
+                .padding(.vertical, ThemeManager.Spacing.sm)
+                .padding(.horizontal, ThemeManager.Spacing.md)
+                .background(ThemeManager.Colors.surface)
+                .cornerRadius(ThemeManager.CornerRadius.md)
+                .accessibilityLabel("Business hours: \(businessHours)")
+            }
+            
+            // Business Image
+            if let businessImageURL = spot.businessImageURL, !businessImageURL.isEmpty {
+                VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
+                    Text("Business Photo")
+                        .font(ThemeManager.Typography.dynamicHeadline())
+                        .foregroundColor(ThemeManager.Colors.textPrimary)
+                    
+                    AsyncImage(url: URL(string: businessImageURL)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    } placeholder: {
+                        Rectangle()
+                            .fill(ThemeManager.Colors.background)
+                            .overlay(
+                                VStack {
+                                    Image(systemName: "building.2")
+                                        .font(ThemeManager.Typography.dynamicTitle2())
+                                        .foregroundColor(ThemeManager.Colors.textSecondary)
+                                    Text("Loading...")
+                                        .font(ThemeManager.Typography.dynamicCaption())
+                                        .foregroundColor(ThemeManager.Colors.textSecondary)
+                                }
+                            )
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: 200)
+                    .clipped()
+                    .cornerRadius(ThemeManager.CornerRadius.lg)
+                    .accessibilityLabel("Business photo")
+                }
+            }
+        }
     }
 }
 

@@ -24,6 +24,8 @@ struct EnrichedSpotData: Codable {
     let noise: String
     let plugs: Bool
     let tip: String
+    let hours: String?
+    let image_url: String?
 }
 
 enum DiscoveryError: LocalizedError {
@@ -316,7 +318,7 @@ class SpotDiscoveryService: ObservableObject {
         let address = formatAddress(from: mapItem.placemark)
         
         let prompt = """
-        For \(name) at \(address), estimate WiFi rating (1-5 stars), noise level (Low/Medium/High), plugs (Yes/No), and a short tip based on typical similar venues. Respond in JSON: {"wifi": number, "noise": "string", "plugs": bool, "tip": "string"}.
+        For \(name) at \(address), estimate WiFi rating (1-5 stars), noise level (Low/Medium/High), plugs (Yes/No), business hours (e.g., "Mon-Fri 7AM-7PM, Sat-Sun 8AM-6PM"), and a short tip based on typical similar venues. Also provide a realistic business image URL if you can find one. Respond in JSON: {"wifi": number, "noise": "string", "plugs": bool, "tip": "string", "hours": "string", "image_url": "string"}.
         """
         
         let requestBody: [String: Any] = [
@@ -400,7 +402,9 @@ class SpotDiscoveryService: ObservableObject {
             wifi: 3,
             noise: "Medium",
             plugs: false,
-            tip: "Auto-discovered"
+            tip: "Auto-discovered",
+            hours: nil,
+            image_url: nil
         )
     }
     
@@ -478,8 +482,15 @@ class SpotDiscoveryService: ObservableObject {
         spot.outlets = enrichedData.plugs
         spot.tips = enrichedData.tip
         spot.lastModified = Date()
-        // Note: lastSeeded property would need to be added to Spot entity
-        // For now, we'll use lastModified to track discovery
+        
+        // Extract business hours and image from Grok API data
+        if let hours = enrichedData.hours, !hours.isEmpty {
+            spot.businessHours = hours
+        }
+        
+        if let imageURL = enrichedData.image_url, !imageURL.isEmpty {
+            spot.businessImageURL = imageURL
+        }
         
         return spot
     }
@@ -489,6 +500,7 @@ class SpotDiscoveryService: ObservableObject {
     func clearDiscoveryError() {
         discoveryError = nil
     }
+    
     
     func resetDiscovery() {
         isDiscovering = false
