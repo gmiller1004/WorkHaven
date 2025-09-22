@@ -161,7 +161,9 @@ class SpotDiscoveryService: ObservableObject {
         }
         
         // Step 1: Check for existing spots within radius
+        print("🔍 Checking for existing spots within \(radius) meters...")
         let existingSpots = await checkExistingSpots(near: location, radius: radius)
+        print("🔍 Found \(existingSpots.count) existing spots")
         
         if !existingSpots.isEmpty {
             await MainActor.run {
@@ -174,7 +176,9 @@ class SpotDiscoveryService: ObservableObject {
         }
         
         // Step 2: Discover new spots using MapKit
+        print("🔍 No existing spots found, starting MapKit discovery...")
         let mapItems = await discoverMapItems(near: location, radius: radius)
+        print("🔍 MapKit discovery found \(mapItems.count) map items")
         
         if mapItems.isEmpty {
             await MainActor.run {
@@ -241,6 +245,8 @@ class SpotDiscoveryService: ObservableObject {
     }
     
     private func searchForCategory(_ category: String, near location: CLLocation, radius: Double) async -> [MKMapItem] {
+        print("🔍 Searching for \(category) near \(location.coordinate) with radius \(radius)")
+        
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = category
         request.region = MKCoordinateRegion(
@@ -255,6 +261,7 @@ class SpotDiscoveryService: ObservableObject {
         do {
             let response = try await search.start()
             let mapItems = Array(response.mapItems.prefix(maxResultsPerCategory))
+            print("🔍 Found \(mapItems.count) \(category) items")
             return mapItems
         } catch {
             print("❌ Error searching for \(category): \(error)")
