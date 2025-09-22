@@ -190,10 +190,14 @@ class SpotDiscoveryService: ObservableObject {
         }
         
         // Step 3: Enrich spots with Grok API
+        print("🔍 Starting enrichment with Grok API for \(mapItems.count) items...")
         let enrichedSpots = await enrichSpotsWithGrokAPI(mapItems: mapItems, totalCount: mapItems.count)
+        print("🔍 Enrichment completed. Got \(enrichedSpots.count) enriched spots")
         
         // Step 4: Create Spot entities and save to Core Data
+        print("🔍 Saving \(enrichedSpots.count) spots to Core Data...")
         let savedSpots = await saveDiscoveredSpots(enrichedSpots: enrichedSpots, context: context)
+        print("🔍 Saved \(savedSpots.count) spots to Core Data")
         
         await MainActor.run {
             discoveredSpots = savedSpots
@@ -293,6 +297,7 @@ class SpotDiscoveryService: ObservableObject {
     // MARK: - Grok API Integration
     
     private func enrichSpotsWithGrokAPI(mapItems: [MKMapItem], totalCount: Int) async -> [DiscoveryResult] {
+        print("🔍 Starting enrichment for \(mapItems.count) map items...")
         var results: [DiscoveryResult] = []
         
         for (index, mapItem) in mapItems.enumerated() {
@@ -301,6 +306,7 @@ class SpotDiscoveryService: ObservableObject {
                 discoveryProgress = 0.5 + (Double(index) / Double(totalCount) * 0.4) // 50-90% of progress
             }
             
+            print("🔍 Enriching item \(index + 1)/\(totalCount): \(mapItem.name ?? "Unknown")")
             let enrichedData = await enrichSpotWithGrokAPI(mapItem: mapItem)
             let result = DiscoveryResult(mapItem: mapItem, enrichedData: enrichedData, error: nil)
             results.append(result)
@@ -309,6 +315,7 @@ class SpotDiscoveryService: ObservableObject {
             try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
         }
         
+        print("🔍 Enrichment completed for \(results.count) items")
         return results
     }
     
@@ -433,6 +440,7 @@ class SpotDiscoveryService: ObservableObject {
     // MARK: - Core Data Integration
     
     private func saveDiscoveredSpots(enrichedSpots: [DiscoveryResult], context: NSManagedObjectContext) async -> [Spot] {
+        print("🔍 Starting to save \(enrichedSpots.count) enriched spots to Core Data...")
         var savedSpots: [Spot] = []
         
         await MainActor.run {
@@ -440,8 +448,9 @@ class SpotDiscoveryService: ObservableObject {
             discoveryProgress = 0.9
         }
         
-        for result in enrichedSpots {
+        for (index, result) in enrichedSpots.enumerated() {
             do {
+                print("🔍 Creating spot \(index + 1)/\(enrichedSpots.count): \(result.mapItem.name ?? "Unknown")")
                 let spot = try createSpotFromDiscoveryResult(result, context: context)
                 savedSpots.append(spot)
             } catch {
@@ -451,6 +460,7 @@ class SpotDiscoveryService: ObservableObject {
         
         // Save context
         do {
+            print("🔍 Saving context with \(savedSpots.count) spots...")
             try context.save()
             print("✅ Successfully saved \(savedSpots.count) discovered spots")
         } catch {
