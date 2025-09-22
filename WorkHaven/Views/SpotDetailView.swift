@@ -640,37 +640,8 @@ struct BusinessInfoSection: View {
                 .accessibilityLabel("Business hours: \(businessHours)")
             }
             
-            // Business Image
-            if let businessImageURL = spot.businessImageURL, !businessImageURL.isEmpty {
-                VStack(alignment: .leading, spacing: ThemeManager.Spacing.sm) {
-                    Text("Business Photo")
-                        .font(ThemeManager.Typography.dynamicHeadline())
-                        .foregroundColor(ThemeManager.Colors.textPrimary)
-                    
-                    AsyncImage(url: URL(string: businessImageURL)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    } placeholder: {
-                        Rectangle()
-                            .fill(ThemeManager.Colors.background)
-                            .overlay(
-                                VStack {
-                                    Image(systemName: "building.2")
-                                        .font(ThemeManager.Typography.dynamicTitle2())
-                                        .foregroundColor(ThemeManager.Colors.textSecondary)
-                                    Text("Loading...")
-                                        .font(ThemeManager.Typography.dynamicCaption())
-                                        .foregroundColor(ThemeManager.Colors.textSecondary)
-                                }
-                            )
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: 200)
-                    .clipped()
-                    .cornerRadius(ThemeManager.CornerRadius.lg)
-                    .accessibilityLabel("Business photo")
-                }
-            }
+            // User Photo Gallery
+            SpotPhotoGallery(spot: spot, context: spot.managedObjectContext!)
         }
     }
 }

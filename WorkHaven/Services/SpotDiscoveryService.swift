@@ -24,6 +24,7 @@ struct EnrichedSpotData: Codable {
     let noise: String
     let plugs: Bool
     let tip: String
+    let hours: String?
 }
 
 enum DiscoveryError: LocalizedError {
@@ -196,7 +197,12 @@ class SpotDiscoveryService: ObservableObject {
         }
         
         let prompt = """
-        For \(name) at \(address), estimate WiFi rating (1-5 stars), noise level (Low/Medium/High), plugs (Yes/No), and a short tip based on typical similar venues. Respond in JSON: {"wifi": number, "noise": "string", "plugs": bool, "tip": "string"}.
+        For \(name) at \(address), please:
+        1. Check Apple Maps or Google Maps for accurate business hours
+        2. Estimate WiFi rating (1-5 stars), noise level (Low/Medium/High), plugs (Yes/No)
+        3. Provide a short tip based on typical similar venues
+        
+        Respond in JSON: {"wifi": number, "noise": "string", "plugs": bool, "tip": "string", "hours": "string"}.
         """
         
         do {
@@ -265,7 +271,8 @@ class SpotDiscoveryService: ObservableObject {
             wifi: 3,
             noise: "Medium",
             plugs: false,
-            tip: "Auto-discovered"
+            tip: "Auto-discovered",
+            hours: nil
         )
     }
     
@@ -312,15 +319,14 @@ class SpotDiscoveryService: ObservableObject {
             spot.websiteURL = url.absoluteString
         }
         
-        // Only use Grok for WiFi, noise, and outlets (not hours/images)
+        // Use Grok for WiFi, noise, outlets, tips, and hours (with Maps verification)
         spot.wifiRating = Int16(enrichedData.wifi)
         spot.noiseRating = enrichedData.noise
         spot.outlets = enrichedData.plugs
         spot.tips = enrichedData.tip
+        spot.businessHours = enrichedData.hours
         
-        // Don't use Grok for hours and images - they're unreliable
-        // spot.businessHours = enrichedData.hours
-        // spot.businessImageURL = enrichedData.image_url
+        // Note: Images will be user-generated content instead
         
         spot.lastModified = Date()
         

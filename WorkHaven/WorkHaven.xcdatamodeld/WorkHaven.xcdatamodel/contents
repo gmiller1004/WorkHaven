@@ -20,6 +20,7 @@
         <attribute name="cloudKitRecordID" optional="YES" attributeType="String"/>
         <attribute name="lastModified" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="userRatings" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UserRating" inverseName="spot" inverseEntity="UserRating"/>
+        <relationship name="photos" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="SpotPhoto" inverseName="spot" inverseEntity="SpotPhoto"/>
     </entity>
     <entity name="UserRating" representedClassName="UserRating" syncable="YES" codeGenerationType="class">
         <attribute name="wifiRating" optional="NO" attributeType="Integer 16" defaultValueString="1" usesScalarValueType="YES"/>
@@ -29,9 +30,17 @@
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="spot" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Spot" inverseName="userRatings" inverseEntity="Spot"/>
     </entity>
+    <entity name="SpotPhoto" representedClassName="SpotPhoto" syncable="YES" codeGenerationType="class">
+        <attribute name="imageData" optional="YES" attributeType="Binary" usesScalarValueType="NO"/>
+        <attribute name="caption" optional="YES" attributeType="String"/>
+        <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="cloudKitRecordID" optional="YES" attributeType="String"/>
+        <relationship name="spot" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Spot" inverseName="photos" inverseEntity="Spot"/>
+    </entity>
     <elements>
         <element name="Item" positionX="-63" positionY="-18" width="128" height="44"/>
         <element name="Spot" positionX="-63" positionY="18" width="128" height="119"/>
         <element name="UserRating" positionX="-63" positionY="54" width="128" height="89"/>
+        <element name="SpotPhoto" positionX="-63" positionY="90" width="128" height="74"/>
     </elements>
 </model>
