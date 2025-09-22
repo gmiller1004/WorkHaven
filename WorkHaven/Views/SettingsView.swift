@@ -404,7 +404,7 @@ struct SettingsView: View {
                         }
                     }) {
                         HStack {
-                            Image(systemName: "building.2.circle.fill")
+                            Image(systemName: "building.2.fill")
                                 .foregroundColor(ThemeManager.Colors.accent)
                             Text("Migrate Business Data")
                                 .font(ThemeManager.Typography.dynamicBody())

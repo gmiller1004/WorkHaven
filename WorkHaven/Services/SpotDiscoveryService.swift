@@ -56,86 +56,18 @@ enum DiscoveryError: LocalizedError {
 
 // MARK: - Spot Discovery Service
 
-@MainActor
 class SpotDiscoveryService: ObservableObject {
-    static let shared = SpotDiscoveryService()
-    
-    // MARK: - Published Properties
-    
     @Published var isDiscovering = false
-    @Published var discoveryProgress: Double = 0.0
-    @Published var discoveryStatus = ""
     @Published var discoveredSpots: [Spot] = []
-    @Published var discoveryError: String? = nil {
-        didSet {
-            if discoveryError != nil {
-                // Clear error after 5 seconds
-                Task {
-                    try? await Task.sleep(nanoseconds: 5_000_000_000)
-                    await MainActor.run {
-                        self.discoveryError = nil
-                    }
-                }
-            }
-        }
-    }
-    
-    // MARK: - Private Properties
+    @Published var discoveryError: DiscoveryError?
     
     private var managedObjectContext: NSManagedObjectContext?
-    private let grokAPIKey = "GROK_API_KEY"
-    private let grokAPIEndpoint = "https://api.x.ai/v1/chat/completions"
-    private let grokModel = "grok-4-fast-non-reasoning"
-    
-    // Cached API key to prevent repeated lookups
     private var _cachedAPIKey: String?
     private var _apiKeyChecked = false
     
-    // Get API key from xcconfig file or Info.plist (cached)
-    private var grokAPIKeyValue: String? {
-        // Only check once and cache the result
-        if !_apiKeyChecked {
-            _apiKeyChecked = true
-            
-            // Try to get from xcconfig first
-            if let xcconfigKey = Bundle.main.object(forInfoDictionaryKey: grokAPIKey) as? String,
-               !xcconfigKey.isEmpty && xcconfigKey != "YOUR_GROK_API_KEY_HERE" {
-                print("✅ Found Grok API key in xcconfig: \(String(xcconfigKey.prefix(10)))...")
-                _cachedAPIKey = xcconfigKey
-            }
-            // Fallback to Info.plist
-            else if let plistKey = Bundle.main.object(forInfoDictionaryKey: grokAPIKey) as? String,
-                    !plistKey.isEmpty && plistKey != "YOUR_GROK_API_KEY_HERE" {
-                print("✅ Found Grok API key in Info.plist: \(String(plistKey.prefix(10)))...")
-                _cachedAPIKey = plistKey
-            }
-            else {
-                print("❌ Grok API key not found in xcconfig or Info.plist")
-                print("📋 Available Info.plist keys: \(Bundle.main.infoDictionary?.keys.sorted() ?? [])")
-                print("🔧 To fix this:")
-                print("   1. Add secrets.xcconfig to Xcode project")
-                print("   2. Configure Build Settings to use secrets.xcconfig")
-                print("   3. Or add GROK_API_KEY to Info.plist manually")
-                _cachedAPIKey = nil
-            }
-        }
-        
-        return _cachedAPIKey
-    }
-    
-    // Discovery settings
-    private let maxResultsPerCategory = 15
-    private let minResultsPerCategory = 10
-    private let discoveryCategories = [
-        "coffee shop",
-        "library", 
-        "park",
-        "co-working space"
-    ]
+    static let shared = SpotDiscoveryService()
     
     private init() {}
-    
-    // MARK: - Configuration
     
     func configure(with context: NSManagedObjectContext) {
         self.managedObjectContext = context
@@ -143,256 +75,189 @@ class SpotDiscoveryService: ObservableObject {
     
     // MARK: - Main Discovery Function
     
-    /// Discovers nearby work spots using MapKit and enriches them with xAI Grok API
-    /// - Parameters:
-    ///   - location: The center location for discovery
-    ///   - radius: Search radius in meters (default: 20 miles = 32,186.88 meters)
-    /// - Returns: Array of discovered and enriched Spot entities
     func discoverSpots(near location: CLLocation, radius: Double = 32186.88) async -> [Spot] {
         guard let context = managedObjectContext else {
-            discoveryError = "Service not configured with Core Data context"
+            print("❌ No managed object context available")
             return []
         }
         
         await MainActor.run {
             isDiscovering = true
-            discoveryProgress = 0.0
-            discoveryStatus = "Starting discovery..."
-            discoveredSpots = []
             discoveryError = nil
         }
         
-        // Step 1: Check for existing spots within radius
-        let existingSpots = await checkExistingSpots(near: location, radius: radius)
-        
-        if !existingSpots.isEmpty {
-            await MainActor.run {
-                discoveryStatus = "Found \(existingSpots.count) existing spots in area"
-                discoveredSpots = existingSpots
-                discoveryProgress = 1.0
-                isDiscovering = false
-            }
-            return existingSpots
-        }
-        
-        // Step 2: Discover new spots using MapKit
-        let mapItems = await discoverMapItems(near: location, radius: radius)
-        
-        if mapItems.isEmpty {
-            await MainActor.run {
-                discoveryStatus = "No new spots found in area"
-                discoveryProgress = 1.0
-                isDiscovering = false
-            }
-            return []
-        }
-        
-        // Step 3: Enrich spots with Grok API
-        let enrichedSpots = await enrichSpotsWithGrokAPI(mapItems: mapItems, totalCount: mapItems.count)
-        
-        // Step 4: Create Spot entities and save to Core Data
-        let savedSpots = await saveDiscoveredSpots(enrichedSpots: enrichedSpots, context: context)
-        
-        await MainActor.run {
-            discoveredSpots = savedSpots
-            discoveryStatus = "Discovered \(savedSpots.count) new work spots"
-            discoveryProgress = 1.0
-            isDiscovering = false
-        }
-        
-        return savedSpots
-    }
-    
-    // MARK: - Private Discovery Methods
-    
-    private func checkExistingSpots(near location: CLLocation, radius: Double) async -> [Spot] {
-        guard let context = managedObjectContext else { return [] }
-        
-        let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
-        
         do {
-            let allSpots = try context.fetch(fetchRequest)
-            let nearbySpots = allSpots.filter { spot in
-                let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
-                return location.distance(from: spotLocation) <= radius
-            }
-            return nearbySpots
-        } catch {
-            print("❌ Error checking existing spots: \(error)")
-            return []
-        }
-    }
-    
-    private func discoverMapItems(near location: CLLocation, radius: Double) async -> [MKMapItem] {
-        var allMapItems: [MKMapItem] = []
-        
-        for (index, category) in discoveryCategories.enumerated() {
-            await MainActor.run {
-                discoveryStatus = "Searching for \(category)..."
-                discoveryProgress = Double(index) / Double(discoveryCategories.count) * 0.5 // 50% of progress
-            }
-            
-            let mapItems = await searchForCategory(category, near: location, radius: radius)
-            allMapItems.append(contentsOf: mapItems)
-        }
-        
-        // Remove duplicates based on coordinate proximity
-        let uniqueMapItems = removeDuplicateMapItems(allMapItems)
-        
-        return uniqueMapItems
-    }
-    
-    private func searchForCategory(_ category: String, near location: CLLocation, radius: Double) async -> [MKMapItem] {
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = category
-        request.region = MKCoordinateRegion(
-            center: location.coordinate,
-            latitudinalMeters: radius * 2,
-            longitudinalMeters: radius * 2
-        )
-        request.resultTypes = [.pointOfInterest]
-        
-        let search = MKLocalSearch(request: request)
-        
-        do {
-            let response = try await search.start()
-            let mapItems = Array(response.mapItems.prefix(maxResultsPerCategory))
-            return mapItems
-        } catch {
-            print("❌ Error searching for \(category): \(error)")
-            return []
-        }
-    }
-    
-    private func removeDuplicateMapItems(_ mapItems: [MKMapItem]) -> [MKMapItem] {
-        var uniqueItems: [MKMapItem] = []
-        let proximityThreshold: CLLocationDistance = 50 // 50 meters
-        
-        for mapItem in mapItems {
-            let isDuplicate = uniqueItems.contains { existingItem in
-                guard let existingLocation = existingItem.placemark.location,
-                      let currentLocation = mapItem.placemark.location else {
-                    return false
+            // Check if we already have spots in the area
+            let existingSpots = try await checkExistingSpots(near: location, radius: radius, context: context)
+            if !existingSpots.isEmpty {
+                print("📍 Found \(existingSpots.count) existing spots in area")
+                await MainActor.run {
+                    discoveredSpots = existingSpots
+                    isDiscovering = false
                 }
-                return existingLocation.distance(from: currentLocation) < proximityThreshold
+                return existingSpots
             }
             
-            if !isDuplicate {
-                uniqueItems.append(mapItem)
+            // Discover new spots using MapKit
+            let searchResults = try await performMapKitSearch(near: location)
+            print("🔍 Found \(searchResults.count) potential spots from MapKit")
+            
+            // Enrich spots with Grok API
+            let enrichedSpots = await enrichSpotsWithGrokAPI(searchResults)
+            print("🤖 Enriched \(enrichedSpots.count) spots with AI data")
+            
+            // Save to Core Data
+            let savedSpots = try await saveSpotsToCoreData(enrichedSpots, context: context)
+            print("💾 Saved \(savedSpots.count) spots to database")
+            
+            await MainActor.run {
+                discoveredSpots = savedSpots
+                isDiscovering = false
+            }
+            
+            return savedSpots
+            
+        } catch {
+            print("❌ Discovery failed: \(error)")
+            await MainActor.run {
+                discoveryError = .networkError(error)
+                isDiscovering = false
+            }
+            return []
+        }
+    }
+    
+    // MARK: - MapKit Search
+    
+    private func performMapKitSearch(near location: CLLocation) async throws -> [MKMapItem] {
+        let searchCategories = ["coffee shop", "library", "park", "co-working space"]
+        var allResults: [MKMapItem] = []
+        
+        for category in searchCategories {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = category
+            request.region = MKCoordinateRegion(
+                center: location.coordinate,
+                latitudinalMeters: 32186.88, // 20 miles
+                longitudinalMeters: 32186.88
+            )
+            
+            let search = MKLocalSearch(request: request)
+            let response = try await search.start()
+            allResults.append(contentsOf: response.mapItems)
+        }
+        
+        // Remove duplicates and limit results
+        var uniqueResults: [MKMapItem] = []
+        var seenCoordinates: Set<String> = []
+        
+        for mapItem in allResults {
+            let coordinate = mapItem.placemark.coordinate
+            let coordinateKey = "\(coordinate.latitude),\(coordinate.longitude)"
+            
+            if !seenCoordinates.contains(coordinateKey) {
+                seenCoordinates.insert(coordinateKey)
+                uniqueResults.append(mapItem)
+                
+                if uniqueResults.count >= 15 {
+                    break
+                }
             }
         }
         
-        return uniqueItems
+        return Array(uniqueResults)
     }
     
-    // MARK: - Grok API Integration
+    // MARK: - Grok API Enrichment
     
-    private func enrichSpotsWithGrokAPI(mapItems: [MKMapItem], totalCount: Int) async -> [DiscoveryResult] {
+    private func enrichSpotsWithGrokAPI(_ mapItems: [MKMapItem]) async -> [DiscoveryResult] {
         var results: [DiscoveryResult] = []
         
-        for (index, mapItem) in mapItems.enumerated() {
-            await MainActor.run {
-                discoveryStatus = "Enriching spot \(index + 1) of \(totalCount)..."
-                discoveryProgress = 0.5 + (Double(index) / Double(totalCount) * 0.4) // 50-90% of progress
-            }
-            
+        for mapItem in mapItems {
             let enrichedData = await enrichSpotWithGrokAPI(mapItem: mapItem)
-            let result = DiscoveryResult(mapItem: mapItem, enrichedData: enrichedData, error: nil)
+            let result = DiscoveryResult(
+                mapItem: mapItem,
+                enrichedData: enrichedData,
+                error: nil
+            )
             results.append(result)
-            
-            // Add delay to respect API rate limits
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
         }
         
         return results
     }
     
     private func enrichSpotWithGrokAPI(mapItem: MKMapItem) async -> EnrichedSpotData? {
-        guard let apiKey = grokAPIKeyValue,
-              !apiKey.isEmpty else {
-            print("⚠️ Grok API key not found in xcconfig file")
+        guard hasGrokAPIKey() else {
+            print("⚠️ No Grok API key available")
             return createDefaultEnrichedData()
         }
         
-        let name = mapItem.name ?? "Unknown"
-        let address = formatAddress(from: mapItem.placemark)
+        guard let name = mapItem.name,
+              let address = mapItem.placemark.title else {
+            return createDefaultEnrichedData()
+        }
         
         let prompt = """
-        For \(name) at \(address), estimate WiFi rating (1-5 stars), noise level (Low/Medium/High), plugs (Yes/No), business hours (e.g., "Mon-Fri 7AM-7PM, Sat-Sun 8AM-6PM"), and a short tip based on typical similar venues. Also provide a realistic business image URL if you can find one. Respond in JSON: {"wifi": number, "noise": "string", "plugs": bool, "tip": "string", "hours": "string", "image_url": "string"}.
+        For \(name) at \(address), estimate WiFi rating (1-5 stars), noise level (Low/Medium/High), plugs (Yes/No), business hours, and a short tip based on typical similar venues. Respond in JSON: {"wifi": number, "noise": "string", "plugs": bool, "tip": "string", "hours": "string", "image_url": "string"}.
         """
         
-        let requestBody: [String: Any] = [
-            "model": grokModel,
-            "messages": [
-                [
-                    "role": "user",
-                    "content": prompt
-                ]
-            ],
-            "max_tokens": 200,
-            "temperature": 0.3
-        ]
-        
-        guard let url = URL(string: grokAPIEndpoint) else {
-            print("❌ Invalid Grok API endpoint")
-            return createDefaultEnrichedData()
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        
         do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-            
-            let (data, response) = try await URLSession.shared.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else {
-                print("❌ Grok API request failed with status: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
-                return createDefaultEnrichedData()
-            }
-            
-            let grokResponse = try JSONDecoder().decode(GrokAPIResponse.self, from: data)
-            
-            if let content = grokResponse.choices.first?.message.content {
-                return parseEnrichedData(from: content)
-            } else {
-                print("❌ No content in Grok API response")
-                return createDefaultEnrichedData()
-            }
-            
+            let response = try await callGrokAPI(prompt: prompt)
+            return parseGrokResponse(response)
         } catch {
-            print("❌ Grok API error: \(error)")
+            print("❌ Grok API error for \(name): \(error)")
             return createDefaultEnrichedData()
         }
     }
     
-    private func parseEnrichedData(from content: String) -> EnrichedSpotData? {
-        // Extract JSON from the response content
-        let jsonPattern = "\\{[^}]*\\}"
-        let regex = try? NSRegularExpression(pattern: jsonPattern)
-        let range = NSRange(location: 0, length: content.utf16.count)
-        
-        guard let match = regex?.firstMatch(in: content, options: [], range: range),
-              let jsonRange = Range(match.range, in: content) else {
-            print("❌ No JSON found in Grok response")
-            return createDefaultEnrichedData()
+    private func callGrokAPI(prompt: String) async throws -> String {
+        guard let apiKey = grokAPIKeyValue else {
+            throw DiscoveryError.apiFailure("No API key available")
         }
         
-        let jsonString = String(content[jsonRange])
+        let url = URL(string: "https://api.x.ai/v1/chat/completions")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        guard let jsonData = jsonString.data(using: .utf8) else {
-            print("❌ Failed to convert JSON string to data")
+        let requestBody: [String: Any] = [
+            "model": "grok-4-fast-non-reasoning",
+            "messages": [
+                ["role": "user", "content": prompt]
+            ],
+            "max_tokens": 500,
+            "temperature": 0.7
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw DiscoveryError.apiFailure("HTTP error: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+        }
+        
+        let grokResponse = try JSONDecoder().decode(GrokAPIResponse.self, from: data)
+        return grokResponse.choices.first?.message.content ?? ""
+    }
+    
+    private func parseGrokResponse(_ response: String) -> EnrichedSpotData? {
+        // Extract JSON from response
+        let jsonStart = response.firstIndex(of: "{") ?? response.startIndex
+        let jsonEnd = response.lastIndex(of: "}") ?? response.endIndex
+        let jsonString = String(response[jsonStart...jsonEnd])
+        
+        guard let data = jsonString.data(using: .utf8) else {
             return createDefaultEnrichedData()
         }
         
         do {
-            let enrichedData = try JSONDecoder().decode(EnrichedSpotData.self, from: jsonData)
+            let enrichedData = try JSONDecoder().decode(EnrichedSpotData.self, from: data)
             return enrichedData
         } catch {
-            print("❌ Failed to parse enriched data JSON: \(error)")
+            print("❌ Failed to parse Grok response: \(error)")
             return createDefaultEnrichedData()
         }
     }
@@ -408,105 +273,64 @@ class SpotDiscoveryService: ObservableObject {
         )
     }
     
-    private func formatAddress(from placemark: MKPlacemark) -> String {
-        var addressComponents: [String] = []
+    // MARK: - Core Data Operations
+    
+    private func checkExistingSpots(near location: CLLocation, radius: Double, context: NSManagedObjectContext) async throws -> [Spot] {
+        let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
+        let spots = try context.fetch(fetchRequest)
         
-        if let name = placemark.name, name != placemark.locality {
-            addressComponents.append(name)
+        return spots.filter { spot in
+            let spotLocation = CLLocation(latitude: spot.latitude, longitude: spot.longitude)
+            return location.distance(from: spotLocation) <= radius
         }
-        if let thoroughfare = placemark.thoroughfare {
-            addressComponents.append(thoroughfare)
-        }
-        if let locality = placemark.locality {
-            addressComponents.append(locality)
-        }
-        if let administrativeArea = placemark.administrativeArea {
-            addressComponents.append(administrativeArea)
-        }
-        
-        return addressComponents.joined(separator: ", ")
     }
     
-    // MARK: - Core Data Integration
-    
-    private func saveDiscoveredSpots(enrichedSpots: [DiscoveryResult], context: NSManagedObjectContext) async -> [Spot] {
+    private func saveSpotsToCoreData(_ results: [DiscoveryResult], context: NSManagedObjectContext) async throws -> [Spot] {
         var savedSpots: [Spot] = []
         
-        await MainActor.run {
-            discoveryStatus = "Saving discovered spots..."
-            discoveryProgress = 0.9
+        for result in results {
+            let spot = createSpotFromDiscoveryResult(result, context: context)
+            savedSpots.append(spot)
         }
         
-        for result in enrichedSpots {
-            do {
-                let spot = try createSpotFromDiscoveryResult(result, context: context)
-                savedSpots.append(spot)
-            } catch {
-                print("❌ Failed to create spot from discovery result: \(error)")
-            }
-        }
-        
-        // Save context
-        do {
-            try context.save()
-            print("✅ Successfully saved \(savedSpots.count) discovered spots")
-        } catch {
-            print("❌ Failed to save discovered spots: \(error)")
-        }
-        
+        try context.save()
         return savedSpots
     }
     
-    private func createSpotFromDiscoveryResult(_ result: DiscoveryResult, context: NSManagedObjectContext) throws -> Spot {
+    private func createSpotFromDiscoveryResult(_ result: DiscoveryResult, context: NSManagedObjectContext) -> Spot {
+        let spot = Spot(context: context)
         let mapItem = result.mapItem
         let enrichedData = result.enrichedData ?? createDefaultEnrichedData()
         
-        // Check for duplicates by address
-        let address = formatAddress(from: mapItem.placemark)
-        let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "address == %@", address)
-        
-        let existingSpots = try context.fetch(fetchRequest)
-        if !existingSpots.isEmpty {
-            throw DiscoveryError.coreDataError(NSError(domain: "DuplicateSpot", code: 1, userInfo: [NSLocalizedDescriptionKey: "Spot already exists"]))
-        }
-        
-        // Create new spot
-        let spot = Spot(context: context)
-        spot.name = mapItem.name ?? "Discovered Spot"
-        spot.address = address
+        // Basic info from MapKit
+        spot.name = mapItem.name ?? "Unknown"
+        spot.address = mapItem.placemark.title ?? "Unknown Address"
         spot.latitude = mapItem.placemark.coordinate.latitude
         spot.longitude = mapItem.placemark.coordinate.longitude
+        
+        // Business info from MapKit
+        if let phoneNumber = mapItem.phoneNumber, !phoneNumber.isEmpty {
+            spot.phoneNumber = phoneNumber
+        }
+        if let url = mapItem.url, !url.absoluteString.isEmpty {
+            spot.websiteURL = url.absoluteString
+        }
+        
+        // Enriched data from Grok API
         spot.wifiRating = Int16(enrichedData.wifi)
         spot.noiseRating = enrichedData.noise
         spot.outlets = enrichedData.plugs
         spot.tips = enrichedData.tip
+        spot.businessHours = enrichedData.hours
+        spot.businessImageURL = enrichedData.image_url
+        
         spot.lastModified = Date()
-        
-        // Extract business information from MKMapItem
-        extractBusinessInfo(from: mapItem, spot: spot)
-        
-        // Use Grok API data for business hours and images (since MKMapItem doesn't provide these)
-        if let hours = enrichedData.hours, !hours.isEmpty {
-            spot.businessHours = hours
-        }
-        
-        if let imageURL = enrichedData.image_url, !imageURL.isEmpty {
-            spot.businessImageURL = imageURL
-        }
         
         return spot
     }
     
-    // MARK: - Utility Methods
-    
-    func clearDiscoveryError() {
-        discoveryError = nil
-    }
-    
     // MARK: - Data Migration
     
-    /// Migrates existing spots to include new business fields from MKMapItem data
     func migrateExistingSpots() async {
         guard let context = managedObjectContext else { return }
         
@@ -517,34 +341,65 @@ class SpotDiscoveryService: ObservableObject {
             let spotsToMigrate = try context.fetch(fetchRequest)
             print("🔄 Migrating \(spotsToMigrate.count) existing spots with new business fields...")
             
-            for spot in spotsToMigrate {
-                // Try to find the spot using MKLocalSearch to get fresh business data
-                if let name = spot.name, let address = spot.address {
-                    let searchRequest = MKLocalSearch.Request()
-                    searchRequest.naturalLanguageQuery = "\(name) \(address)"
-                    searchRequest.region = MKCoordinateRegion(
-                        center: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude),
-                        latitudinalMeters: 1000,
-                        longitudinalMeters: 1000
-                    )
-                    
-                    let search = MKLocalSearch(request: searchRequest)
-                    let response = try await search.start()
-                    
-                    if let mapItem = response.mapItems.first {
-                        // Update spot with fresh business data
-                        if let phoneNumber = mapItem.phoneNumber, !phoneNumber.isEmpty {
-                            spot.phoneNumber = phoneNumber
-                        }
-                        if let url = mapItem.url, !url.absoluteString.isEmpty {
-                            spot.websiteURL = url.absoluteString
-                        }
-                        print("✅ Migrated business data for: \(name)")
+            // Process in smaller batches to avoid overwhelming the system
+            let batchSize = 10
+            let batches = spotsToMigrate.chunked(into: batchSize)
+            
+            for (batchIndex, batch) in batches.enumerated() {
+                print("📦 Processing batch \(batchIndex + 1)/\(batches.count) (\(batch.count) spots)")
+                
+                for (index, spot) in batch.enumerated() {
+                    // Add delay to avoid rate limiting (50 requests per 60 seconds)
+                    if index > 0 {
+                        try await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds delay
                     }
+                    
+                    // Try to find the spot using MKLocalSearch to get fresh business data
+                    if let name = spot.name, let address = spot.address {
+                        let searchRequest = MKLocalSearch.Request()
+                        searchRequest.naturalLanguageQuery = "\(name) \(address)"
+                        searchRequest.region = MKCoordinateRegion(
+                            center: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude),
+                            latitudinalMeters: 1000,
+                            longitudinalMeters: 1000
+                        )
+                        
+                        let search = MKLocalSearch(request: searchRequest)
+                        let response = try await search.start()
+                        
+                        if let mapItem = response.mapItems.first {
+                            // Update spot with fresh business data from MKMapItem
+                            if let phoneNumber = mapItem.phoneNumber, !phoneNumber.isEmpty {
+                                spot.phoneNumber = phoneNumber
+                            }
+                            if let url = mapItem.url, !url.absoluteString.isEmpty {
+                                spot.websiteURL = url.absoluteString
+                            }
+                            
+                            // Also try to get business hours and images from Grok API
+                            let enrichedData = await enrichSpotWithGrokAPI(mapItem: mapItem)
+                            if let hours = enrichedData?.hours, !hours.isEmpty {
+                                spot.businessHours = hours
+                            }
+                            if let imageURL = enrichedData?.image_url, !imageURL.isEmpty {
+                                spot.businessImageURL = imageURL
+                            }
+                            
+                            print("✅ Migrated business data for: \(name)")
+                        }
+                    }
+                }
+                
+                // Save after each batch
+                try context.save()
+                print("✅ Batch \(batchIndex + 1) completed and saved")
+                
+                // Longer delay between batches
+                if batchIndex < batches.count - 1 {
+                    try await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds between batches
                 }
             }
             
-            try context.save()
             print("✅ Migration completed successfully!")
             
         } catch {
@@ -552,59 +407,46 @@ class SpotDiscoveryService: ObservableObject {
         }
     }
     
-    // MARK: - Business Information Extraction from MKMapItem
+    // MARK: - Utility Methods
     
-    private func extractBusinessInfo(from mapItem: MKMapItem, spot: Spot) {
-        // Extract phone number if available
-        if let phoneNumber = mapItem.phoneNumber, !phoneNumber.isEmpty {
-            spot.phoneNumber = phoneNumber
-            print("📞 Business phone: \(phoneNumber)")
-        }
-        
-        // Extract URL if available
-        if let url = mapItem.url, !url.absoluteString.isEmpty {
-            spot.websiteURL = url.absoluteString
-            print("🌐 Business website: \(url.absoluteString)")
-        }
-        
-        // Extract point of interest category
-        if let poiCategory = mapItem.pointOfInterestCategory {
-            print("🏢 Business category: \(poiCategory)")
-        }
-        
-        // Note: MKMapItem doesn't provide business hours or images directly
-        // For business hours, we would need to use additional APIs like:
-        // - Google Places API
-        // - Yelp Fusion API
-        // - Apple's own business data APIs (if available)
-        
-        // For business images, we would need to use:
-        // - Google Places API Photos
-        // - Yelp API photos
-        // - Other business photo services
-        
-        // For now, we'll use Grok API as a fallback for this information
-        // but prioritize MKMapItem data when available
-        // This will be handled in the calling function
-    }
-    
-    
-    func resetDiscovery() {
-        isDiscovering = false
-        discoveryProgress = 0.0
-        discoveryStatus = ""
-        discoveredSpots = []
+    func clearDiscoveryError() {
         discoveryError = nil
     }
     
     // MARK: - API Key Management
     
-    func hasGrokAPIKey() -> Bool {
-        guard let key = grokAPIKeyValue else { return false }
-        return !key.isEmpty && key != "YOUR_GROK_API_KEY_HERE"
+    private var grokAPIKeyValue: String? {
+        if _apiKeyChecked {
+            return _cachedAPIKey
+        }
+        
+        _apiKeyChecked = true
+        
+        // Try to get from xcconfig first
+        if let xcconfigKey = Bundle.main.object(forInfoDictionaryKey: "GROK_API_KEY") as? String,
+           !xcconfigKey.isEmpty && xcconfigKey != "YOUR_GROK_API_KEY_HERE" {
+            _cachedAPIKey = xcconfigKey
+            print("✅ Found Grok API key in xcconfig: \(String(xcconfigKey.prefix(10)))...")
+            return _cachedAPIKey
+        }
+        
+        // Fallback to Info.plist
+        if let plistKey = Bundle.main.object(forInfoDictionaryKey: "GROK_API_KEY") as? String,
+           !plistKey.isEmpty && plistKey != "YOUR_GROK_API_KEY_HERE" {
+            _cachedAPIKey = plistKey
+            print("✅ Found Grok API key in Info.plist: \(String(plistKey.prefix(10)))...")
+            return _cachedAPIKey
+        }
+        
+        print("❌ Grok API key not found in xcconfig or Info.plist")
+        return nil
     }
     
-    func getGrokAPIKeyStatus() -> String {
+    func hasGrokAPIKey() -> Bool {
+        return grokAPIKeyValue != nil
+    }
+    
+    var apiKeyStatus: String {
         if hasGrokAPIKey() {
             return "API key configured"
         } else {
@@ -613,21 +455,17 @@ class SpotDiscoveryService: ObservableObject {
     }
 }
 
-// MARK: - Grok API Response Models
+// MARK: - Array Extension for Batching
 
-private struct GrokAPIResponse: Codable {
-    let choices: [GrokChoice]
+extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
+        }
+    }
 }
 
-private struct GrokChoice: Codable {
-    let message: GrokMessage
-}
-
-private struct GrokMessage: Codable {
-    let content: String
-}
-
-// MARK: - Extensions
+// MARK: - SpotDiscoveryService Extensions
 
 extension SpotDiscoveryService {
     /// Convenience method to discover spots near a coordinate
@@ -649,4 +487,18 @@ extension SpotDiscoveryService {
             return "Discovered \(discoveredSpots.count) work spots"
         }
     }
+}
+
+// MARK: - Grok API Response Models
+
+private struct GrokAPIResponse: Codable {
+    let choices: [GrokChoice]
+}
+
+private struct GrokChoice: Codable {
+    let message: GrokMessage
+}
+
+private struct GrokMessage: Codable {
+    let content: String
 }

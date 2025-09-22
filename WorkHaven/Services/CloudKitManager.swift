@@ -208,7 +208,12 @@ class CloudKitManager: ObservableObject {
                         spot.setValue(record.recordID.recordName, forKey: "cloudKitRecordID")
                     }
                 case .failure(let error):
-                    print("Error uploading record \(recordID): \(error)")
+                    // Handle "Server Record Changed" errors more gracefully
+                    if let ckError = error as? CKError, ckError.code == .serverRecordChanged {
+                        print("⚠️ Record already exists on server, skipping upload: \(recordID.recordName)")
+                    } else {
+                        print("Error uploading record \(recordID): \(error)")
+                    }
                 }
             }
             

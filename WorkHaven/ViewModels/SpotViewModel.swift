@@ -473,7 +473,7 @@ class SpotViewModel: ObservableObject {
     }
     
     func getDiscoveryStatus() -> String {
-        return spotDiscoveryService.getGrokAPIKeyStatus()
+        return spotDiscoveryService.apiKeyStatus
     }
     
     func hasDiscoveryAPIKey() -> Bool {
