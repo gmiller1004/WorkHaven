@@ -120,7 +120,7 @@ class SpotViewModel: ObservableObject {
     }
     
     private func getCurrentUserLocation() async -> CLLocation? {
-        // Request location permission
+        print("🔍 Requesting location permission...")
         locationService.requestLocationPermission()
         
         // Wait for location with timeout
@@ -131,8 +131,13 @@ class SpotViewModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
         }
         
-        // Return user location or nil if not available
-        return locationService.currentLocation
+        if let location = locationService.currentLocation {
+            print("✅ Got user location: \(location.coordinate)")
+            return location
+        } else {
+            print("❌ Failed to get user location after \(timeout) seconds")
+            return nil
+        }
     }
     
     private func checkSpotsWithinRadius(userLocation: CLLocation) async -> [Spot] {
@@ -505,7 +510,9 @@ class SpotViewModel: ObservableObject {
                 seedingStatus = "Discovering nearby work spots..."
             }
             
+            print("🔍 Starting discovery for location: \(userLocation.coordinate) with radius: \(discoveryRadius)")
             let discoveredSpots = await spotDiscoveryService.discoverSpots(near: userLocation, radius: discoveryRadius)
+            print("🔍 Discovery completed. Found \(discoveredSpots.count) spots")
             
             await MainActor.run {
                 spots = discoveredSpots

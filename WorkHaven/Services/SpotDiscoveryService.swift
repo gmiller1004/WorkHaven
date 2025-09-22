@@ -85,29 +85,40 @@ class SpotDiscoveryService: ObservableObject {
     private let grokAPIEndpoint = "https://api.x.ai/v1/chat/completions"
     private let grokModel = "grok-4-fast-non-reasoning"
     
-    // Get API key from xcconfig file or Info.plist
+    // Cached API key to prevent repeated lookups
+    private var _cachedAPIKey: String?
+    private var _apiKeyChecked = false
+    
+    // Get API key from xcconfig file or Info.plist (cached)
     private var grokAPIKeyValue: String? {
-        // Try to get from xcconfig first
-        if let xcconfigKey = Bundle.main.object(forInfoDictionaryKey: grokAPIKey) as? String,
-           !xcconfigKey.isEmpty && xcconfigKey != "YOUR_GROK_API_KEY_HERE" {
-            print("✅ Found Grok API key in xcconfig: \(String(xcconfigKey.prefix(10)))...")
-            return xcconfigKey
+        // Only check once and cache the result
+        if !_apiKeyChecked {
+            _apiKeyChecked = true
+            
+            // Try to get from xcconfig first
+            if let xcconfigKey = Bundle.main.object(forInfoDictionaryKey: grokAPIKey) as? String,
+               !xcconfigKey.isEmpty && xcconfigKey != "YOUR_GROK_API_KEY_HERE" {
+                print("✅ Found Grok API key in xcconfig: \(String(xcconfigKey.prefix(10)))...")
+                _cachedAPIKey = xcconfigKey
+            }
+            // Fallback to Info.plist
+            else if let plistKey = Bundle.main.object(forInfoDictionaryKey: grokAPIKey) as? String,
+                    !plistKey.isEmpty && plistKey != "YOUR_GROK_API_KEY_HERE" {
+                print("✅ Found Grok API key in Info.plist: \(String(plistKey.prefix(10)))...")
+                _cachedAPIKey = plistKey
+            }
+            else {
+                print("❌ Grok API key not found in xcconfig or Info.plist")
+                print("📋 Available Info.plist keys: \(Bundle.main.infoDictionary?.keys.sorted() ?? [])")
+                print("🔧 To fix this:")
+                print("   1. Add secrets.xcconfig to Xcode project")
+                print("   2. Configure Build Settings to use secrets.xcconfig")
+                print("   3. Or add GROK_API_KEY to Info.plist manually")
+                _cachedAPIKey = nil
+            }
         }
         
-        // Fallback to Info.plist
-        if let plistKey = Bundle.main.object(forInfoDictionaryKey: grokAPIKey) as? String,
-           !plistKey.isEmpty && plistKey != "YOUR_GROK_API_KEY_HERE" {
-            print("✅ Found Grok API key in Info.plist: \(String(plistKey.prefix(10)))...")
-            return plistKey
-        }
-        
-        print("❌ Grok API key not found in xcconfig or Info.plist")
-        print("📋 Available Info.plist keys: \(Bundle.main.infoDictionary?.keys.sorted() ?? [])")
-        print("🔧 To fix this:")
-        print("   1. Add secrets.xcconfig to Xcode project")
-        print("   2. Configure Build Settings to use secrets.xcconfig")
-        print("   3. Or add GROK_API_KEY to Info.plist manually")
-        return nil
+        return _cachedAPIKey
     }
     
     // Discovery settings
