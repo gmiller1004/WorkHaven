@@ -15,7 +15,7 @@ class CloudKitManager: ObservableObject {
     @Published var isSyncing = false
     @Published var lastSyncDate: Date?
     @Published var syncError: String?
-    @Published var isCloudKitEnabled = false
+    @Published var isCloudKitEnabled = true
     
     private let container: CKContainer
     private let privateDatabase: CKDatabase

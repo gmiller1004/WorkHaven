@@ -161,9 +161,7 @@ class SpotDiscoveryService: ObservableObject {
         }
         
         // Step 1: Check for existing spots within radius
-        print("🔍 Checking for existing spots within \(radius) meters...")
         let existingSpots = await checkExistingSpots(near: location, radius: radius)
-        print("🔍 Found \(existingSpots.count) existing spots")
         
         if !existingSpots.isEmpty {
             await MainActor.run {
@@ -176,9 +174,7 @@ class SpotDiscoveryService: ObservableObject {
         }
         
         // Step 2: Discover new spots using MapKit
-        print("🔍 No existing spots found, starting MapKit discovery...")
         let mapItems = await discoverMapItems(near: location, radius: radius)
-        print("🔍 MapKit discovery found \(mapItems.count) map items")
         
         if mapItems.isEmpty {
             await MainActor.run {
@@ -190,14 +186,10 @@ class SpotDiscoveryService: ObservableObject {
         }
         
         // Step 3: Enrich spots with Grok API
-        print("🔍 Starting enrichment with Grok API for \(mapItems.count) items...")
         let enrichedSpots = await enrichSpotsWithGrokAPI(mapItems: mapItems, totalCount: mapItems.count)
-        print("🔍 Enrichment completed. Got \(enrichedSpots.count) enriched spots")
         
         // Step 4: Create Spot entities and save to Core Data
-        print("🔍 Saving \(enrichedSpots.count) spots to Core Data...")
         let savedSpots = await saveDiscoveredSpots(enrichedSpots: enrichedSpots, context: context)
-        print("🔍 Saved \(savedSpots.count) spots to Core Data")
         
         await MainActor.run {
             discoveredSpots = savedSpots
@@ -249,8 +241,6 @@ class SpotDiscoveryService: ObservableObject {
     }
     
     private func searchForCategory(_ category: String, near location: CLLocation, radius: Double) async -> [MKMapItem] {
-        print("🔍 Searching for \(category) near \(location.coordinate) with radius \(radius)")
-        
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = category
         request.region = MKCoordinateRegion(
@@ -265,7 +255,6 @@ class SpotDiscoveryService: ObservableObject {
         do {
             let response = try await search.start()
             let mapItems = Array(response.mapItems.prefix(maxResultsPerCategory))
-            print("🔍 Found \(mapItems.count) \(category) items")
             return mapItems
         } catch {
             print("❌ Error searching for \(category): \(error)")
@@ -297,7 +286,6 @@ class SpotDiscoveryService: ObservableObject {
     // MARK: - Grok API Integration
     
     private func enrichSpotsWithGrokAPI(mapItems: [MKMapItem], totalCount: Int) async -> [DiscoveryResult] {
-        print("🔍 Starting enrichment for \(mapItems.count) map items...")
         var results: [DiscoveryResult] = []
         
         for (index, mapItem) in mapItems.enumerated() {
@@ -306,7 +294,6 @@ class SpotDiscoveryService: ObservableObject {
                 discoveryProgress = 0.5 + (Double(index) / Double(totalCount) * 0.4) // 50-90% of progress
             }
             
-            print("🔍 Enriching item \(index + 1)/\(totalCount): \(mapItem.name ?? "Unknown")")
             let enrichedData = await enrichSpotWithGrokAPI(mapItem: mapItem)
             let result = DiscoveryResult(mapItem: mapItem, enrichedData: enrichedData, error: nil)
             results.append(result)
@@ -315,7 +302,6 @@ class SpotDiscoveryService: ObservableObject {
             try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
         }
         
-        print("🔍 Enrichment completed for \(results.count) items")
         return results
     }
     
@@ -440,7 +426,6 @@ class SpotDiscoveryService: ObservableObject {
     // MARK: - Core Data Integration
     
     private func saveDiscoveredSpots(enrichedSpots: [DiscoveryResult], context: NSManagedObjectContext) async -> [Spot] {
-        print("🔍 Starting to save \(enrichedSpots.count) enriched spots to Core Data...")
         var savedSpots: [Spot] = []
         
         await MainActor.run {
@@ -448,9 +433,8 @@ class SpotDiscoveryService: ObservableObject {
             discoveryProgress = 0.9
         }
         
-        for (index, result) in enrichedSpots.enumerated() {
+        for result in enrichedSpots {
             do {
-                print("🔍 Creating spot \(index + 1)/\(enrichedSpots.count): \(result.mapItem.name ?? "Unknown")")
                 let spot = try createSpotFromDiscoveryResult(result, context: context)
                 savedSpots.append(spot)
             } catch {
@@ -460,7 +444,6 @@ class SpotDiscoveryService: ObservableObject {
         
         // Save context
         do {
-            print("🔍 Saving context with \(savedSpots.count) spots...")
             try context.save()
             print("✅ Successfully saved \(savedSpots.count) discovered spots")
         } catch {
