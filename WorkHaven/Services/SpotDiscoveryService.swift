@@ -483,7 +483,10 @@ class SpotDiscoveryService: ObservableObject {
         spot.tips = enrichedData.tip
         spot.lastModified = Date()
         
-        // Extract business hours and image from Grok API data
+        // Extract business information from MKMapItem
+        extractBusinessInfo(from: mapItem, spot: spot)
+        
+        // Use Grok API data for business hours and images (since MKMapItem doesn't provide these)
         if let hours = enrichedData.hours, !hours.isEmpty {
             spot.businessHours = hours
         }
@@ -499,6 +502,42 @@ class SpotDiscoveryService: ObservableObject {
     
     func clearDiscoveryError() {
         discoveryError = nil
+    }
+    
+    // MARK: - Business Information Extraction from MKMapItem
+    
+    private func extractBusinessInfo(from mapItem: MKMapItem, spot: Spot) {
+        // Extract phone number if available
+        if let phoneNumber = mapItem.phoneNumber, !phoneNumber.isEmpty {
+            spot.phoneNumber = phoneNumber
+            print("📞 Business phone: \(phoneNumber)")
+        }
+        
+        // Extract URL if available
+        if let url = mapItem.url, !url.absoluteString.isEmpty {
+            spot.websiteURL = url.absoluteString
+            print("🌐 Business website: \(url.absoluteString)")
+        }
+        
+        // Extract point of interest category
+        if let poiCategory = mapItem.pointOfInterestCategory {
+            print("🏢 Business category: \(poiCategory)")
+        }
+        
+        // Note: MKMapItem doesn't provide business hours or images directly
+        // For business hours, we would need to use additional APIs like:
+        // - Google Places API
+        // - Yelp Fusion API
+        // - Apple's own business data APIs (if available)
+        
+        // For business images, we would need to use:
+        // - Google Places API Photos
+        // - Yelp API photos
+        // - Other business photo services
+        
+        // For now, we'll use Grok API as a fallback for this information
+        // but prioritize MKMapItem data when available
+        // This will be handled in the calling function
     }
     
     

@@ -588,6 +588,33 @@ struct BusinessInfoSection: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: ThemeManager.Spacing.md) {
+            // Contact Information
+            if let phoneNumber = spot.phoneNumber, !phoneNumber.isEmpty {
+                ContactInfoRow(
+                    icon: "phone",
+                    title: "Phone",
+                    content: phoneNumber,
+                    action: {
+                        if let url = URL(string: "tel:\(phoneNumber)") {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                )
+            }
+            
+            if let websiteURL = spot.websiteURL, !websiteURL.isEmpty {
+                ContactInfoRow(
+                    icon: "globe",
+                    title: "Website",
+                    content: websiteURL,
+                    action: {
+                        if let url = URL(string: websiteURL) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                )
+            }
+            
             // Business Hours
             if let businessHours = spot.businessHours, !businessHours.isEmpty {
                 VStack(alignment: .leading, spacing: ThemeManager.Spacing.xs) {
@@ -645,6 +672,50 @@ struct BusinessInfoSection: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Contact Info Row
+
+struct ContactInfoRow: View {
+    let icon: String
+    let title: String
+    let content: String
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: ThemeManager.Spacing.sm) {
+                Image(systemName: icon)
+                    .foregroundColor(ThemeManager.Colors.accent)
+                    .font(ThemeManager.Typography.dynamicBody())
+                    .frame(width: 20)
+                
+                VStack(alignment: .leading, spacing: ThemeManager.Spacing.xs) {
+                    Text(title)
+                        .font(ThemeManager.Typography.dynamicCaption())
+                        .foregroundColor(ThemeManager.Colors.textSecondary)
+                    
+                    Text(content)
+                        .font(ThemeManager.Typography.dynamicBody())
+                        .foregroundColor(ThemeManager.Colors.textPrimary)
+                        .lineLimit(2)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .foregroundColor(ThemeManager.Colors.textSecondary)
+                    .font(ThemeManager.Typography.dynamicCaption())
+            }
+            .padding(.vertical, ThemeManager.Spacing.sm)
+            .padding(.horizontal, ThemeManager.Spacing.md)
+            .background(ThemeManager.Colors.surface)
+            .cornerRadius(ThemeManager.CornerRadius.md)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel("\(title): \(content)")
+        .accessibilityHint("Double tap to \(title == "Phone" ? "call" : "open website")")
     }
 }
 

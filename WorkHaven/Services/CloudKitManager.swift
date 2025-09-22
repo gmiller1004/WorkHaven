@@ -39,6 +39,8 @@ class CloudKitManager: ObservableObject {
         static let photoURL = "photoURL"
         static let businessHours = "businessHours"
         static let businessImageURL = "businessImageURL"
+        static let phoneNumber = "phoneNumber"
+        static let websiteURL = "websiteURL"
         static let lastModified = "lastModified"
         static let localID = "localID"
     }
@@ -351,6 +353,8 @@ class CloudKitManager: ObservableObject {
         record[FieldNames.photoURL] = spot.photoURL
         record[FieldNames.businessHours] = spot.businessHours
         record[FieldNames.businessImageURL] = spot.businessImageURL
+        record[FieldNames.phoneNumber] = spot.phoneNumber
+        record[FieldNames.websiteURL] = spot.websiteURL
         record[FieldNames.lastModified] = Date()
         record[FieldNames.localID] = spot.objectID.uriRepresentation().absoluteString
         
@@ -383,6 +387,8 @@ class CloudKitManager: ObservableObject {
         spot.photoURL = record[FieldNames.photoURL] as? String
         spot.businessHours = record[FieldNames.businessHours] as? String
         spot.businessImageURL = record[FieldNames.businessImageURL] as? String
+        spot.phoneNumber = record[FieldNames.phoneNumber] as? String
+        spot.websiteURL = record[FieldNames.websiteURL] as? String
         
         // Store CloudKit record ID
         spot.setValue(record.recordID.recordName, forKey: "cloudKitRecordID")
@@ -419,6 +425,8 @@ class CloudKitManager: ObservableObject {
             spot.photoURL = record[FieldNames.photoURL] as? String ?? spot.photoURL
             spot.businessHours = record[FieldNames.businessHours] as? String ?? spot.businessHours
             spot.businessImageURL = record[FieldNames.businessImageURL] as? String ?? spot.businessImageURL
+            spot.phoneNumber = record[FieldNames.phoneNumber] as? String ?? spot.phoneNumber
+            spot.websiteURL = record[FieldNames.websiteURL] as? String ?? spot.websiteURL
             spot.setValue(remoteLastModified, forKey: "lastModified")
         }
     }
