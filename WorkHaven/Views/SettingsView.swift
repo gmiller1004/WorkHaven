@@ -399,6 +399,25 @@ struct SettingsView: View {
                     .accessibilityHint("Double tap to completely reset app and discover new spots")
                     
                     Button(action: {
+                        Task {
+                            await migrateBusinessData()
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "building.2.circle.fill")
+                                .foregroundColor(ThemeManager.Colors.accent)
+                            Text("Migrate Business Data")
+                                .font(ThemeManager.Typography.dynamicBody())
+                                .foregroundColor(ThemeManager.Colors.textPrimary)
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                                .foregroundColor(ThemeManager.Colors.textSecondary)
+                        }
+                    }
+                    .accessibilityLabel("Migrate Business Data")
+                    .accessibilityHint("Double tap to add phone numbers and websites to existing spots")
+                    
+                    Button(action: {
                         showingDatabaseReset = true
                     }) {
                         HStack {
@@ -517,6 +536,33 @@ struct SettingsView: View {
                 showingPermissionAlert = true
                 isAutoDiscoverEnabled = false
                 saveSettings()
+            }
+        }
+    }
+    
+    private func migrateBusinessData() async {
+        await MainActor.run {
+            isSeeding = true
+            seedingStatus = "Migrating business data for existing spots..."
+        }
+        
+        do {
+            let spotDiscoveryService = SpotDiscoveryService.shared
+            spotDiscoveryService.configure(with: PersistenceController.shared.container.viewContext)
+            await spotDiscoveryService.migrateExistingSpots()
+            
+            await MainActor.run {
+                isSeeding = false
+                seedingStatus = "Business data migration completed!"
+                seedingAlertMessage = "Phone numbers and websites have been added to existing spots where available."
+                showingSeedingAlert = true
+            }
+        } catch {
+            await MainActor.run {
+                isSeeding = false
+                seedingStatus = "Migration failed"
+                seedingAlertMessage = "Failed to migrate business data: \(error.localizedDescription)"
+                showingSeedingAlert = true
             }
         }
     }

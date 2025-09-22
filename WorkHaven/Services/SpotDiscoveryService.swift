@@ -504,6 +504,54 @@ class SpotDiscoveryService: ObservableObject {
         discoveryError = nil
     }
     
+    // MARK: - Data Migration
+    
+    /// Migrates existing spots to include new business fields from MKMapItem data
+    func migrateExistingSpots() async {
+        guard let context = managedObjectContext else { return }
+        
+        let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "phoneNumber == nil OR websiteURL == nil")
+        
+        do {
+            let spotsToMigrate = try context.fetch(fetchRequest)
+            print("🔄 Migrating \(spotsToMigrate.count) existing spots with new business fields...")
+            
+            for spot in spotsToMigrate {
+                // Try to find the spot using MKLocalSearch to get fresh business data
+                if let name = spot.name, let address = spot.address {
+                    let searchRequest = MKLocalSearch.Request()
+                    searchRequest.naturalLanguageQuery = "\(name) \(address)"
+                    searchRequest.region = MKCoordinateRegion(
+                        center: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude),
+                        latitudinalMeters: 1000,
+                        longitudinalMeters: 1000
+                    )
+                    
+                    let search = MKLocalSearch(request: searchRequest)
+                    let response = try await search.start()
+                    
+                    if let mapItem = response.mapItems.first {
+                        // Update spot with fresh business data
+                        if let phoneNumber = mapItem.phoneNumber, !phoneNumber.isEmpty {
+                            spot.phoneNumber = phoneNumber
+                        }
+                        if let url = mapItem.url, !url.absoluteString.isEmpty {
+                            spot.websiteURL = url.absoluteString
+                        }
+                        print("✅ Migrated business data for: \(name)")
+                    }
+                }
+            }
+            
+            try context.save()
+            print("✅ Migration completed successfully!")
+            
+        } catch {
+            print("❌ Migration failed: \(error)")
+        }
+    }
+    
     // MARK: - Business Information Extraction from MKMapItem
     
     private func extractBusinessInfo(from mapItem: MKMapItem, spot: Spot) {
