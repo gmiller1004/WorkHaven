@@ -52,6 +52,11 @@ struct WorkHavenApp: App {
         // Connect notification manager to data importer
         dataImporter.setNotificationManager(notificationManager)
         
+        // Configure data importer with geocoding service
+        Task {
+            await dataImporter.configure()
+        }
+        
         // Check if we already have spots in the database
         let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
         fetchRequest.fetchLimit = 1

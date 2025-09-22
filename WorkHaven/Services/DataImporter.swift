@@ -3,6 +3,11 @@
 //  WorkHaven
 //
 //  Created by Greg Miller on 9/19/25.
+//  Updated to integrate GeocodingService for accurate lat/long coordinates
+//
+//  This service handles importing work spot data from CSV files and hardcoded data,
+//  with integrated geocoding to ensure accurate latitude and longitude coordinates.
+//  Features batch processing, rate limiting, and fallback to CSV coordinates.
 //
 
 import Foundation
@@ -13,12 +18,22 @@ class DataImporter: ObservableObject {
     @Published var isImporting = false
     @Published var importProgress: Double = 0.0
     @Published var importStatus = ""
+    @Published var availableCities: [String] = ["Boise", "Austin", "Seattle", "Murrieta"]
     
     private let managedObjectContext: NSManagedObjectContext
     private var notificationManager: NotificationManager?
+    private nonisolated let geocodingService = GeocodingService.shared
+    
+    // Geocoding batch settings
+    private let geocodingBatchSize = 10
+    private let geocodingDelay: UInt64 = 1_000_000_000 // 1 second delay between batches
     
     init(context: NSManagedObjectContext) {
         self.managedObjectContext = context
+    }
+    
+    func configure() async {
+        await geocodingService.configure(with: managedObjectContext)
     }
     
     func setNotificationManager(_ manager: NotificationManager) {
@@ -48,63 +63,61 @@ class DataImporter: ObservableObject {
         print("🧹 Starting duplicate cleanup...")
         
         let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
-        fetchRequest.sortDescriptors = [NSSortDescriptor(key: "name", ascending: true)]
+        fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Spot.lastModified, ascending: false)]
         
         do {
             let allSpots = try managedObjectContext.fetch(fetchRequest)
-            print("📊 Total spots in database: \(allSpots.count)")
+            var seenSpots: Set<String> = []
+            var duplicatesToDelete: [Spot] = []
             
-            var duplicatesRemoved = 0
-            
-            // Group spots by name and city
-            var spotGroups: [String: [Spot]] = [:]
             for spot in allSpots {
-                let key = "\(spot.name ?? "")|\(spot.address ?? "")"
-                if spotGroups[key] == nil {
-                    spotGroups[key] = []
-                }
-                spotGroups[key]?.append(spot)
-            }
-            
-            print("📊 Unique spot groups: \(spotGroups.count)")
-            
-            // Remove duplicates, keeping the first one
-            for (key, spots) in spotGroups {
-                if spots.count > 1 {
-                    print("🔍 Found \(spots.count) duplicates for '\(spots.first?.name ?? "")' in '\(spots.first?.address ?? "")'")
-                    
-                    // Keep the first spot, delete the rest
-                    for i in 1..<spots.count {
-                        managedObjectContext.delete(spots[i])
-                        duplicatesRemoved += 1
-                    }
+                let identifier = "\(spot.name ?? "")_\(spot.address ?? "")"
+                if seenSpots.contains(identifier) {
+                    duplicatesToDelete.append(spot)
+                } else {
+                    seenSpots.insert(identifier)
                 }
             }
             
-            if duplicatesRemoved > 0 {
+            for duplicate in duplicatesToDelete {
+                managedObjectContext.delete(duplicate)
+            }
+            
+            if !duplicatesToDelete.isEmpty {
                 try managedObjectContext.save()
-                print("✅ Cleaned up \(duplicatesRemoved) duplicate spots")
+                print("✅ Cleaned up \(duplicatesToDelete.count) duplicate spots")
             } else {
                 print("✅ No duplicates found")
             }
             
         } catch {
-            print("❌ Error cleaning up duplicates: \(error)")
+            print("❌ Error during duplicate cleanup: \(error)")
         }
     }
     
-    // MARK: - CSV Import Functions
+    // MARK: - Import Methods
     
-    func importWorkSpaces(for city: String) async {
-        let fileName = "\(city)_Work_Spots"
-        await importWorkSpaces(from: fileName)
+    func importWorkSpaces(from fileName: String) async {
+        await performImport(from: fileName)
     }
     
     func importBoiseWorkSpaces(from fileName: String = "Boise_Work_Spots") async {
-        await importWorkSpaces(from: fileName)
+        await performImport(from: fileName)
     }
     
-    private func importWorkSpaces(from fileName: String) async {
+    func importWorkSpaces(for city: String) async {
+        let fileName = "\(city)_Work_Spots"
+        await performImport(from: fileName)
+    }
+    
+    func importAllAvailableCities() async {
+        let cities = ["Boise", "Austin", "Seattle", "Murrieta"]
+        for city in cities {
+            await importWorkSpaces(for: city)
+        }
+    }
+    
+    private func performImport(from fileName: String) async {
         // Prevent multiple simultaneous imports
         guard !isImporting else {
             print("⚠️ Import already in progress, skipping duplicate import request for \(fileName)")
@@ -143,39 +156,31 @@ class DataImporter: ObservableObject {
         // First, clean up any existing duplicates
         await cleanupDuplicates()
         
+        // Try to load from CSV file first
+        var spots: [CSVSpot] = []
+        
         do {
-            // Try to load from CSV file first
-            var spots: [CSVSpot] = []
-            
-            do {
-                guard let csvData = try loadCSVFile(fileName: fileName) else {
-                    throw DataImporterError.fileNotFound
-                }
-                spots = try parseCSVData(csvData)
-                await MainActor.run {
-                    importStatus = "Loading data from CSV file..."
-                }
-            } catch {
-                // Fallback to hardcoded data if CSV file not found
-                await MainActor.run {
-                    importStatus = "CSV file not found, using built-in data..."
-                }
-                spots = getHardcodedBoiseSpots()
+            guard let csvData = try loadCSVFile(fileName: fileName) else {
+                throw DataImporterError.fileNotFound
             }
-            
-            await importSpotsToCoreData(spots)
-            
+            spots = try parseCSVData(csvData)
             await MainActor.run {
-                importStatus = "Import completed successfully! \(spots.count) spots imported."
-                isImporting = false
-                importProgress = 1.0
+                importStatus = "Loading data from CSV file..."
             }
-            
         } catch {
+            // Fallback to hardcoded data if CSV file not found
             await MainActor.run {
-                importStatus = "Import failed: \(error.localizedDescription)"
-                isImporting = false
+                importStatus = "CSV file not found, using built-in data..."
             }
+            spots = getHardcodedBoiseSpots()
+        }
+        
+        await importSpotsToCoreData(spots)
+        
+        await MainActor.run {
+            importStatus = "Import completed successfully! \(spots.count) spots imported."
+            isImporting = false
+            importProgress = 1.0
         }
     }
     
@@ -225,19 +230,25 @@ class DataImporter: ObservableObject {
             let noiseRating = columns[3].trimmingCharacters(in: .whitespacesAndNewlines)
             let photoURL = columns[4].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : columns[4].trimmingCharacters(in: .whitespacesAndNewlines)
             
-            // Validate latitude and longitude
-            guard let latitude = Double(columns[5].trimmingCharacters(in: .whitespacesAndNewlines)),
-                  let longitude = Double(columns[6].trimmingCharacters(in: .whitespacesAndNewlines)) else {
-                print("❌ ERROR: Line \(index + 2) - Invalid coordinates for '\(name)': lat='\(columns[5])', lng='\(columns[6])'")
-                errorCount += 1
-                continue
-            }
+            // Parse latitude and longitude (allow missing/invalid values for geocoding)
+            let latitudeString = columns[5].trimmingCharacters(in: .whitespacesAndNewlines)
+            let longitudeString = columns[6].trimmingCharacters(in: .whitespacesAndNewlines)
             
-            // Validate coordinate ranges
-            guard isValidLatitude(latitude) && isValidLongitude(longitude) else {
-                print("❌ ERROR: Line \(index + 2) - Coordinates out of valid range for '\(name)': lat=\(latitude), lng=\(longitude)")
-                errorCount += 1
-                continue
+            var latitude: Double = 0.0
+            var longitude: Double = 0.0
+            var needsGeocoding = false
+            
+            if let lat = Double(latitudeString), let lng = Double(longitudeString) {
+                if isValidLatitude(lat) && isValidLongitude(lng) {
+                    latitude = lat
+                    longitude = lng
+                } else {
+                    print("⚠️ WARNING: Line \(index + 2) - Invalid coordinates for '\(name)': lat=\(lat), lng=\(lng), will geocode")
+                    needsGeocoding = true
+                }
+            } else {
+                print("⚠️ WARNING: Line \(index + 2) - Missing coordinates for '\(name)', will geocode")
+                needsGeocoding = true
             }
             
             // Validate required fields
@@ -254,7 +265,8 @@ class DataImporter: ObservableObject {
                 noiseRating: noiseRating,
                 photoURL: photoURL,
                 latitude: latitude,
-                longitude: longitude
+                longitude: longitude,
+                needsGeocoding: needsGeocoding
             )
             
             spots.append(spot)
@@ -295,67 +307,183 @@ class DataImporter: ObservableObject {
         var importedCount = 0
         var skippedCount = 0
         var errorCount = 0
+        var geocodingCount = 0
         
-        for (index, csvSpot) in csvSpots.enumerated() {
-            // Enhanced deduplication: check by name AND city (since we use city as address)
-            let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
-            fetchRequest.predicate = NSPredicate(format: "name == %@ AND address == %@", csvSpot.name, csvSpot.city)
-            
-            do {
-                let existingSpots = try managedObjectContext.fetch(fetchRequest)
-                if !existingSpots.isEmpty {
-                    print("⚠️  WARNING: Spot '\(csvSpot.name)' in '\(csvSpot.city)' already exists (found \(existingSpots.count) duplicates), skipping...")
-                    skippedCount += 1
-                    continue
-                }
-                
-                // Create new spot
-                let spot = Spot(context: managedObjectContext)
-                spot.name = csvSpot.name
-                spot.address = csvSpot.city
-                spot.latitude = csvSpot.latitude
-                spot.longitude = csvSpot.longitude
-                spot.wifiRating = mapWiFiRating(csvSpot.wifiRating)
-                spot.noiseRating = mapNoiseRating(csvSpot.noiseRating)
-                spot.outlets = determineOutletsAvailability(csvSpot.name, wifiRating: csvSpot.wifiRating)
-                spot.tips = generateTips(for: csvSpot)
-                spot.photoURL = csvSpot.photoURL
-                spot.lastModified = Date() // Set modification date for notifications
-                
+        // Separate spots that need geocoding
+        let spotsNeedingGeocoding = csvSpots.filter { $0.needsGeocoding }
+        let spotsWithCoordinates = csvSpots.filter { !$0.needsGeocoding }
+        
+        print("📍 Geocoding needed for \(spotsNeedingGeocoding.count) spots")
+        print("📍 Using existing coordinates for \(spotsWithCoordinates.count) spots")
+        
+        // First, import spots with existing coordinates
+        for (index, csvSpot) in spotsWithCoordinates.enumerated() {
+            let result = await createSpotFromCSV(csvSpot)
+            switch result {
+            case .success:
                 importedCount += 1
-                
-                // Trigger notifications for new spots
-                DispatchQueue.main.async {
-                    self.notificationManager?.scheduleNewSpotNotification(for: spot)
-                    
-                    // Check if it's a hot spot
-                    if spot.wifiRating >= 4 {
-                        self.notificationManager?.scheduleHotSpotNotification(for: spot)
-                    }
-                    
-                    // Check if it's nearby for location-based notifications
-                    self.notificationManager?.scheduleLocationBasedNotification(for: spot)
-                }
-                
-                // Update progress
-                let progress = Double(index + 1) / Double(csvSpots.count)
-                await MainActor.run {
-                    importProgress = progress
-                    importStatus = "Imported \(importedCount) of \(csvSpots.count) spots... (Skipped: \(skippedCount))"
-                }
-                
-            } catch {
-                print("❌ ERROR: Failed to create spot '\(csvSpot.name)': \(error)")
+            case .skipped:
+                skippedCount += 1
+            case .error:
                 errorCount += 1
             }
+            
+            // Update progress
+            let progress = Double(index + 1) / Double(csvSpots.count)
+            await MainActor.run {
+                importProgress = progress * 0.5 // First half for existing coordinates
+                importStatus = "Imported \(importedCount) of \(csvSpots.count) spots... (Skipped: \(skippedCount))"
+            }
+        }
+        
+        // Then, geocode and import spots that need coordinates
+        if !spotsNeedingGeocoding.isEmpty {
+            await MainActor.run {
+                importStatus = "Geocoding \(spotsNeedingGeocoding.count) spots for accurate coordinates..."
+            }
+            
+            geocodingCount = await geocodeAndImportSpots(spotsNeedingGeocoding, totalSpots: csvSpots.count, importedCount: importedCount)
         }
         
         // Save context
         do {
             try managedObjectContext.save()
-            print("✅ Successfully saved \(importedCount) spots to Core Data (Skipped: \(skippedCount), Errors: \(errorCount))")
+            print("✅ Successfully saved \(importedCount + geocodingCount) spots to Core Data (Skipped: \(skippedCount), Errors: \(errorCount))")
         } catch {
             print("❌ ERROR: Failed to save context: \(error)")
+        }
+    }
+    
+    private func geocodeAndImportSpots(_ spots: [CSVSpot], totalSpots: Int, importedCount: Int) async -> Int {
+        var geocodingCount = 0
+        let batchCount = (spots.count + geocodingBatchSize - 1) / geocodingBatchSize
+        
+        for batchIndex in 0..<batchCount {
+            let startIndex = batchIndex * geocodingBatchSize
+            let endIndex = min(startIndex + geocodingBatchSize, spots.count)
+            let batch = Array(spots[startIndex..<endIndex])
+            
+            print("📍 Geocoding batch \(batchIndex + 1)/\(batchCount) (\(batch.count) spots)")
+            
+            for (index, csvSpot) in batch.enumerated() {
+                let address = "\(csvSpot.name), \(csvSpot.city)"
+                print("🔍 Geocoding: \(address)")
+                
+                do {
+                    let placemarks = try await geocodingService.geocodeAddress(address)
+                    
+                    if let placemark = placemarks.first, let location = placemark.location {
+                        // Update CSV spot with geocoded coordinates
+                        let updatedSpot = CSVSpot(
+                            name: csvSpot.name,
+                            city: csvSpot.city,
+                            wifiRating: csvSpot.wifiRating,
+                            noiseRating: csvSpot.noiseRating,
+                            photoURL: csvSpot.photoURL,
+                            latitude: location.coordinate.latitude,
+                            longitude: location.coordinate.longitude,
+                            needsGeocoding: false
+                        )
+                        
+                        let result = await createSpotFromCSV(updatedSpot)
+                        switch result {
+                        case .success:
+                            geocodingCount += 1
+                            print("✅ Geocoded: \(address) -> \(location.coordinate.latitude), \(location.coordinate.longitude)")
+                        case .skipped:
+                            print("⚠️ Skipped geocoded spot: \(address)")
+                        case .error:
+                            print("❌ Error creating geocoded spot: \(address)")
+                        }
+                    } else {
+                        print("❌ No geocoding results for: \(address), using CSV coordinates")
+                        // Fallback to CSV coordinates (even if 0,0)
+                        let result = await createSpotFromCSV(csvSpot)
+                        switch result {
+                        case .success:
+                            geocodingCount += 1
+                        case .skipped:
+                            break
+                        case .error:
+                            break
+                        }
+                    }
+                } catch {
+                    print("❌ Geocoding failed for \(address): \(error.localizedDescription), using CSV coordinates")
+                    // Fallback to CSV coordinates
+                    let result = await createSpotFromCSV(csvSpot)
+                    switch result {
+                    case .success:
+                        geocodingCount += 1
+                    case .skipped:
+                        break
+                    case .error:
+                        break
+                    }
+                }
+                
+                // Update progress
+                let currentIndex = importedCount + (batchIndex * geocodingBatchSize) + index + 1
+                let progress = Double(currentIndex) / Double(totalSpots)
+                await MainActor.run {
+                    importProgress = progress
+                    importStatus = "Geocoded \(geocodingCount) of \(spots.count) spots... (Total: \(importedCount + geocodingCount))"
+                }
+            }
+            
+            // Rate limiting delay between batches
+            if batchIndex < batchCount - 1 {
+                print("⏳ Rate limiting: waiting 1 second before next batch...")
+                try? await Task.sleep(nanoseconds: geocodingDelay)
+            }
+        }
+        
+        return geocodingCount
+    }
+    
+    private func createSpotFromCSV(_ csvSpot: CSVSpot) async -> ImportResult {
+        // Enhanced deduplication: check by name AND city (since we use city as address)
+        let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "name == %@ AND address == %@", csvSpot.name, csvSpot.city)
+        
+        do {
+            let existingSpots = try managedObjectContext.fetch(fetchRequest)
+            if !existingSpots.isEmpty {
+                print("⚠️ WARNING: Spot '\(csvSpot.name)' in '\(csvSpot.city)' already exists (found \(existingSpots.count) duplicates), skipping...")
+                return .skipped
+            }
+            
+            // Create new spot
+            let spot = Spot(context: managedObjectContext)
+            spot.name = csvSpot.name
+            spot.address = csvSpot.city
+            spot.latitude = csvSpot.latitude
+            spot.longitude = csvSpot.longitude
+            spot.wifiRating = mapWiFiRating(csvSpot.wifiRating)
+            spot.noiseRating = mapNoiseRating(csvSpot.noiseRating)
+            spot.outlets = determineOutletsAvailability(csvSpot.name, wifiRating: csvSpot.wifiRating)
+            spot.tips = generateTips(for: csvSpot)
+            spot.photoURL = csvSpot.photoURL
+            spot.lastModified = Date() // Set modification date for notifications
+            
+            // Trigger notifications for new spots
+            DispatchQueue.main.async {
+                self.notificationManager?.scheduleNewSpotNotification(for: spot)
+                
+                // Check if it's a hot spot
+                if spot.wifiRating >= 4 {
+                    self.notificationManager?.scheduleHotSpotNotification(for: spot)
+                }
+                
+                // Check if it's nearby for location-based notifications
+                self.notificationManager?.scheduleLocationBasedNotification(for: spot)
+            }
+            
+            return .success
+            
+        } catch {
+            print("❌ ERROR: Failed to create spot '\(csvSpot.name)': \(error)")
+            return .error
         }
     }
     
@@ -387,128 +515,49 @@ class DataImporter: ObservableObject {
         case "variable":
             return "Medium" // Default variable to medium
         default:
-            return "Low" // Default to low
+            return "Medium" // Default to medium
         }
     }
     
     private func determineOutletsAvailability(_ name: String, wifiRating: String) -> Bool {
-        // Most coffee shops and work spaces have outlets
-        let outletKeywords = ["coffee", "cafe", "coffee house", "roasting", "studio", "hotel", "library"]
-        let hasOutletKeyword = outletKeywords.contains { keyword in
-            name.lowercased().contains(keyword)
-        }
-        
-        // Parks typically don't have outlets
-        let noOutletKeywords = ["park"]
-        let hasNoOutletKeyword = noOutletKeywords.contains { keyword in
-            name.lowercased().contains(keyword)
-        }
-        
-        return hasOutletKeyword && !hasNoOutletKeyword
+        // Simple heuristic: if WiFi is good, likely has outlets
+        let wifiScore = mapWiFiRating(wifiRating)
+        return wifiScore >= 4
     }
     
-    private func generateTips(for csvSpot: CSVSpot) -> String? {
+    private func generateTips(for csvSpot: CSVSpot) -> String {
         var tips: [String] = []
         
-        // WiFi-specific tips
+        // WiFi tips
         switch csvSpot.wifiRating.lowercased() {
         case "fast", "strong":
-            tips.append("Excellent WiFi speed - great for video calls")
+            tips.append("Excellent WiFi speed")
         case "available", "open":
-            tips.append("Reliable WiFi available")
+            tips.append("Good WiFi available")
         case "free":
-            tips.append("Free WiFi - no purchase required")
+            tips.append("Free WiFi")
         case "slow":
-            tips.append("WiFi can be slow during peak hours")
+            tips.append("WiFi can be slow")
         default:
             break
         }
         
-        // Noise-specific tips
+        // Noise tips
         switch csvSpot.noiseRating.lowercased() {
         case "low":
-            tips.append("Quiet environment - perfect for focused work")
-        case "medium":
-            tips.append("Moderate noise level - bring headphones")
+            tips.append("Quiet environment")
         case "high":
-            tips.append("Can get noisy - not ideal for calls")
-        case "variable":
-            tips.append("Noise level varies throughout the day")
+            tips.append("Can be noisy")
         default:
             break
         }
         
-        // Location-specific tips
-        if csvSpot.name.lowercased().contains("park") {
-            tips.append("Outdoor workspace - weather dependent")
+        // Outlet tips
+        if determineOutletsAvailability(csvSpot.name, wifiRating: csvSpot.wifiRating) {
+            tips.append("Power outlets available")
         }
         
-        if csvSpot.name.lowercased().contains("hotel") {
-            tips.append("Hotel lobby - may require purchase")
-        }
-        
-        if csvSpot.name.lowercased().contains("library") {
-            tips.append("Library environment - maintain quiet voices")
-        }
-        
-        // Boise-specific tips
-        if csvSpot.name == "Neckar Coffee" {
-            tips.append("Popular local spot - can get busy")
-        }
-        
-        if csvSpot.name == "JUMP" {
-            tips.append("Modern co-working space with amenities")
-        }
-        
-        return tips.isEmpty ? nil : tips.joined(separator: " • ")
-    }
-    
-    // MARK: - Hardcoded Data
-    
-    private func getHardcodedBoiseSpots() -> [CSVSpot] {
-        return [
-            CSVSpot(name: "Neckar Coffee", city: "Boise ID", wifiRating: "Fast", noiseRating: "Low", photoURL: nil, latitude: 43.6187, longitude: -116.2146),
-            CSVSpot(name: "Broadcast Coffee", city: "Boise ID", wifiRating: "Available", noiseRating: "Medium", photoURL: nil, latitude: 43.6135, longitude: -116.2034),
-            CSVSpot(name: "Push & Pour", city: "Boise ID", wifiRating: "Available", noiseRating: "Medium", photoURL: nil, latitude: 43.5904, longitude: -116.2796),
-            CSVSpot(name: "Flying M", city: "Boise ID", wifiRating: "Available", noiseRating: "Medium", photoURL: nil, latitude: 43.6154, longitude: -116.2020),
-            CSVSpot(name: "Alchemist Coffee Roasting Co", city: "Boise ID", wifiRating: "Available", noiseRating: "Low", photoURL: nil, latitude: 43.6218, longitude: -116.3125),
-            CSVSpot(name: "Coffee Studio", city: "Boise ID", wifiRating: "Available", noiseRating: "Low", photoURL: nil, latitude: 43.6047, longitude: -116.2437),
-            CSVSpot(name: "The District Coffee House", city: "Boise ID", wifiRating: "Available", noiseRating: "Low", photoURL: nil, latitude: 43.6129, longitude: -116.2115),
-            CSVSpot(name: "Hyde Perk Coffee House", city: "Boise ID", wifiRating: "Available", noiseRating: "Low", photoURL: nil, latitude: 43.5898, longitude: -116.1956),
-            CSVSpot(name: "Slow By Slow Coffee Bar", city: "Boise ID", wifiRating: "Available", noiseRating: "Low", photoURL: nil, latitude: 43.6182, longitude: -116.2008),
-            CSVSpot(name: "Ann Morrison Park", city: "Boise ID", wifiRating: "Free", noiseRating: "Variable", photoURL: nil, latitude: 43.6097, longitude: -116.2278),
-            CSVSpot(name: "Julia Davis Park", city: "Boise ID", wifiRating: "Free", noiseRating: "Variable", photoURL: nil, latitude: 43.6142, longitude: -116.1975),
-            CSVSpot(name: "Cherie Buckner Webb Park", city: "Boise ID", wifiRating: "Free", noiseRating: "Variable", photoURL: nil, latitude: 43.6105, longitude: -116.2031),
-            CSVSpot(name: "Library! at Cole & Ustick", city: "Boise ID", wifiRating: "Available", noiseRating: "Low", photoURL: nil, latitude: 43.6337, longitude: -116.2794),
-            CSVSpot(name: "The Grove Hotel Lobby", city: "Boise ID", wifiRating: "Strong", noiseRating: "Low", photoURL: nil, latitude: 43.6158, longitude: -116.2012),
-            CSVSpot(name: "JUMP", city: "Boise ID", wifiRating: "Open", noiseRating: "Variable", photoURL: nil, latitude: 43.6138, longitude: -116.2087),
-            CSVSpot(name: "PINE", city: "Boise ID", wifiRating: "Available", noiseRating: "Low", photoURL: "https://pinecoffeesupply.com/pages/boise-id", latitude: 43.6175, longitude: -116.2063),
-            CSVSpot(name: "Zero Six Coffee Fix", city: "Boise ID", wifiRating: "Available", noiseRating: "Medium", photoURL: "https://boise.citycast.fm/best/coffee-shops-study-remote-work", latitude: 43.6121, longitude: -116.2110)
-        ]
-    }
-    
-    // MARK: - City Management
-    
-    func getAvailableCities() -> [String] {
-        // Get list of CSV files in the app bundle
-        let fileManager = FileManager.default
-        guard let bundlePath = Bundle.main.resourcePath else { return [] }
-        
-        do {
-            let files = try fileManager.contentsOfDirectory(atPath: bundlePath)
-            let csvFiles = files.filter { $0.hasSuffix("_Work_Spots.csv") }
-            return csvFiles.map { $0.replacingOccurrences(of: "_Work_Spots.csv", with: "") }
-        } catch {
-            print("Error reading bundle directory: \(error)")
-            return []
-        }
-    }
-    
-    func importAllAvailableCities() async {
-        let cities = getAvailableCities()
-        for city in cities {
-            await importWorkSpaces(for: city)
-        }
+        return tips.joined(separator: ". ")
     }
     
     // MARK: - Validation Functions
@@ -521,43 +570,18 @@ class DataImporter: ObservableObject {
         return longitude >= -180.0 && longitude <= 180.0
     }
     
-    // MARK: - Utility Functions
+    // MARK: - Hardcoded Data (Fallback)
     
-    func clearAllSpots() async {
-        await MainActor.run {
-            importStatus = "Clearing all spots..."
-        }
-        
-        do {
-            // Fetch all spots
-            let fetchRequest: NSFetchRequest<Spot> = Spot.fetchRequest()
-            let allSpots = try managedObjectContext.fetch(fetchRequest)
-            
-            print("🗑️ Found \(allSpots.count) spots to delete")
-            
-            // Delete each spot individually
-            for spot in allSpots {
-                managedObjectContext.delete(spot)
-            }
-            
-            // Save the changes
-            try managedObjectContext.save()
-            
-            print("✅ Successfully deleted \(allSpots.count) spots")
-            
-            await MainActor.run {
-                importStatus = "All spots cleared successfully (\(allSpots.count) deleted)"
-            }
-        } catch {
-            print("❌ Error clearing spots: \(error)")
-            await MainActor.run {
-                importStatus = "Error clearing spots: \(error.localizedDescription)"
-            }
-        }
+    private func getHardcodedBoiseSpots() -> [CSVSpot] {
+        return [
+            CSVSpot(name: "Neckar Coffee", city: "Boise ID", wifiRating: "Strong", noiseRating: "Low", photoURL: nil, latitude: 43.6150, longitude: -116.2023, needsGeocoding: false),
+            CSVSpot(name: "Flying M Coffee", city: "Boise ID", wifiRating: "Available", noiseRating: "Medium", photoURL: nil, latitude: 43.6125, longitude: -116.2025, needsGeocoding: false),
+            CSVSpot(name: "Dawson Taylor Coffee", city: "Boise ID", wifiRating: "Fast", noiseRating: "Low", photoURL: nil, latitude: 43.6140, longitude: -116.2010, needsGeocoding: false)
+        ]
     }
 }
 
-// MARK: - Data Models
+// MARK: - Supporting Types
 
 struct CSVSpot {
     let name: String
@@ -567,9 +591,14 @@ struct CSVSpot {
     let photoURL: String?
     let latitude: Double
     let longitude: Double
+    let needsGeocoding: Bool
 }
 
-// MARK: - Error Types
+enum ImportResult {
+    case success
+    case skipped
+    case error
+}
 
 enum DataImporterError: LocalizedError {
     case fileNotFound
