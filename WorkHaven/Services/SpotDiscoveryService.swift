@@ -85,9 +85,29 @@ class SpotDiscoveryService: ObservableObject {
     private let grokAPIEndpoint = "https://api.x.ai/v1/chat/completions"
     private let grokModel = "grok-4-fast-non-reasoning"
     
-    // Get API key from xcconfig file
+    // Get API key from xcconfig file or Info.plist
     private var grokAPIKeyValue: String? {
-        return Bundle.main.object(forInfoDictionaryKey: grokAPIKey) as? String
+        // Try to get from xcconfig first
+        if let xcconfigKey = Bundle.main.object(forInfoDictionaryKey: grokAPIKey) as? String,
+           !xcconfigKey.isEmpty && xcconfigKey != "YOUR_GROK_API_KEY_HERE" {
+            print("✅ Found Grok API key in xcconfig: \(String(xcconfigKey.prefix(10)))...")
+            return xcconfigKey
+        }
+        
+        // Fallback to Info.plist
+        if let plistKey = Bundle.main.object(forInfoDictionaryKey: grokAPIKey) as? String,
+           !plistKey.isEmpty && plistKey != "YOUR_GROK_API_KEY_HERE" {
+            print("✅ Found Grok API key in Info.plist: \(String(plistKey.prefix(10)))...")
+            return plistKey
+        }
+        
+        print("❌ Grok API key not found in xcconfig or Info.plist")
+        print("📋 Available Info.plist keys: \(Bundle.main.infoDictionary?.keys.sorted() ?? [])")
+        print("🔧 To fix this:")
+        print("   1. Add secrets.xcconfig to Xcode project")
+        print("   2. Configure Build Settings to use secrets.xcconfig")
+        print("   3. Or add GROK_API_KEY to Info.plist manually")
+        return nil
     }
     
     // Discovery settings
