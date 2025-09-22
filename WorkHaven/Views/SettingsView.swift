@@ -23,7 +23,9 @@ struct SettingsView: View {
     @State private var seedingStatus = ""
     @State private var showingSeedingAlert = false
     @State private var seedingAlertMessage = ""
+    #if DEBUG
     @State private var showingDatabaseReset = false
+    #endif
     
     init(context: NSManagedObjectContext) {
         _notificationManager = StateObject(wrappedValue: NotificationManager(context: context))
@@ -336,25 +338,9 @@ struct SettingsView: View {
                     }
                 }
                 
-                // Database Management Section
+                // Debug Tools Section (Debug Only)
+                #if DEBUG
                 Section {
-                    Button(action: {
-                        showingDatabaseReset = true
-                    }) {
-                        HStack {
-                            Image(systemName: "trash.circle")
-                                .foregroundColor(ThemeManager.Colors.error)
-                            Text("Reset Database")
-                                .font(ThemeManager.Typography.dynamicBody())
-                                .foregroundColor(ThemeManager.Colors.textPrimary)
-                            Spacer()
-                            Image(systemName: "arrow.right")
-                                .foregroundColor(ThemeManager.Colors.textSecondary)
-                        }
-                    }
-                    .accessibilityLabel("Reset Database")
-                    .accessibilityHint("Double tap to open database reset options")
-                    
                     Button(action: {
                         Task {
                             await testCloudKitConnection()
@@ -373,13 +359,31 @@ struct SettingsView: View {
                     }
                     .accessibilityLabel("Test CloudKit Connection")
                     .accessibilityHint("Double tap to test CloudKit connectivity")
+                    
+                    Button(action: {
+                        showingDatabaseReset = true
+                    }) {
+                        HStack {
+                            Image(systemName: "trash.circle")
+                                .foregroundColor(ThemeManager.Colors.error)
+                            Text("Reset Database (Debug)")
+                                .font(ThemeManager.Typography.dynamicBody())
+                                .foregroundColor(ThemeManager.Colors.textPrimary)
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                                .foregroundColor(ThemeManager.Colors.textSecondary)
+                        }
+                    }
+                    .accessibilityLabel("Reset Database Debug")
+                    .accessibilityHint("Double tap to open database reset options (debug only)")
                 } header: {
-                    Text("Database Management")
+                    Text("Debug Tools")
                 } footer: {
-                    Text("Reset your database to start fresh. Choose between local, CloudKit, or complete reset.")
+                    Text("Development tools for testing and debugging. Not available in production builds.")
                         .font(ThemeManager.Typography.dynamicCaption())
                         .foregroundColor(ThemeManager.Colors.textSecondary)
                 }
+                #endif
                 
                 // App Information Section
                 Section {
@@ -437,12 +441,14 @@ struct SettingsView: View {
                     isPresented: $showingRadiusPicker
                 )
             }
+            #if DEBUG
             .sheet(isPresented: $showingDatabaseReset) {
                 DatabaseResetView(
                     context: PersistenceController.shared.container.viewContext,
                     cloudKitManager: CloudKitManager(context: PersistenceController.shared.container.viewContext)
                 )
             }
+            #endif
         }
     }
     

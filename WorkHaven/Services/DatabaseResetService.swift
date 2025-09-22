@@ -249,9 +249,9 @@ struct DatabaseResetView: View {
                         .fontWeight(.bold)
                         .foregroundColor(ThemeManager.Colors.textPrimary)
                     
-                    Text("Choose how to reset your database")
+                    Text("⚠️ DEBUG ONLY - Choose how to reset your database")
                         .font(ThemeManager.Typography.dynamicBody())
-                        .foregroundColor(ThemeManager.Colors.textSecondary)
+                        .foregroundColor(ThemeManager.Colors.warning)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top, ThemeManager.Spacing.lg)
@@ -326,7 +326,7 @@ struct DatabaseResetView: View {
                 .padding(.horizontal, ThemeManager.Spacing.lg)
                 .padding(.bottom, ThemeManager.Spacing.lg)
             }
-            .navigationTitle("Reset Database")
+            .navigationTitle("Reset Database (Debug)")
             .navigationBarTitleDisplayMode(.inline)
             .alert("Confirm Reset", isPresented: $showingConfirmation) {
                 Button("Reset", role: .destructive) {
