@@ -85,6 +85,11 @@ class SpotDiscoveryService: ObservableObject {
     private let grokAPIEndpoint = "https://api.x.ai/v1/chat/completions"
     private let grokModel = "grok-4-fast-non-reasoning"
     
+    // Get API key from xcconfig file
+    private var grokAPIKeyValue: String? {
+        return Bundle.main.object(forInfoDictionaryKey: grokAPIKey) as? String
+    }
+    
     // Discovery settings
     private let maxResultsPerCategory = 15
     private let minResultsPerCategory = 10
@@ -270,9 +275,9 @@ class SpotDiscoveryService: ObservableObject {
     }
     
     private func enrichSpotWithGrokAPI(mapItem: MKMapItem) async -> EnrichedSpotData? {
-        guard let apiKey = UserDefaults.standard.string(forKey: grokAPIKey),
+        guard let apiKey = grokAPIKeyValue,
               !apiKey.isEmpty else {
-            print("⚠️ Grok API key not found in UserDefaults")
+            print("⚠️ Grok API key not found in xcconfig file")
             return createDefaultEnrichedData()
         }
         
@@ -464,17 +469,17 @@ class SpotDiscoveryService: ObservableObject {
     
     // MARK: - API Key Management
     
-    func setGrokAPIKey(_ apiKey: String) {
-        UserDefaults.standard.set(apiKey, forKey: grokAPIKey)
-    }
-    
-    func getGrokAPIKey() -> String? {
-        return UserDefaults.standard.string(forKey: grokAPIKey)
-    }
-    
     func hasGrokAPIKey() -> Bool {
-        guard let key = getGrokAPIKey() else { return false }
-        return !key.isEmpty
+        guard let key = grokAPIKeyValue else { return false }
+        return !key.isEmpty && key != "YOUR_GROK_API_KEY_HERE"
+    }
+    
+    func getGrokAPIKeyStatus() -> String {
+        if hasGrokAPIKey() {
+            return "API key configured"
+        } else {
+            return "API key not configured - add GROK_API_KEY to secrets.xcconfig"
+        }
     }
 }
 
